@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incremental Insights</title>
+    <meta name="description" content="Local campaign analysis tool for calculating incremental opportunities">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div class="app-background"></div>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <div class="logo-section">
+                <div class="icon-box">
+                    <i data-lucide="bar-chart-2"></i>
+                </div>
+                <div class="title-group">
+                    <h1>Incremental Insights</h1>
+                    <span class="subtitle">Campaign Optimization Tool</span>
+                </div>
+            </div>
+            <div class="privacy-badge">
+                <i data-lucide="shield-check"></i>
+                <span>100% Local Processing</span>
+            </div>
+        </header>
+
+        <!-- Upload View -->
+        <section id="upload-section" class="active-view">
+            <div class="glass-card upload-card">
+                <div class="upload-content">
+                    <h2>Upload Campaign Data</h2>
+                    <p>Import your Excel report to analyze opportunities</p>
+
+                    <div class="file-drop-area" id="drop-area">
+                        <div class="upload-icon-wrapper">
+                            <i data-lucide="upload-cloud"></i>
+                        </div>
+                        <p class="drop-text">Drag & Drop your file here or <span class="browse-link">Browse</span></p>
+                        <input type="file" id="file-input" accept=".xlsx, .xls, .csv">
+                        <p class="file-support">Supports .xlsx, .xls, .csv</p>
+                    </div>
+
+                    <div class="info-box">
+                        <i data-lucide="info"></i>
+                        <p>Required fields: Partner, Advertiser, Campaign, Decision Power Score, Budget, etc.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard View -->
+        <main id="dashboard-section" class="hidden">
+            <!-- Sidebar Controls -->
+            <aside class="sidebar glass-panel">
+                <div class="sidebar-header">
+                    <h3>Analysis Controls</h3>
+                </div>
+
+                <div class="filter-container">
+                    <div class="filter-group">
+                        <label>Partner</label>
+                        <select id="filter-partner" class="custom-select">
+                            <option value="all">All Partners</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Advertiser</label>
+                        <select id="filter-advertiser" class="custom-select">
+                            <option value="all">All Advertisers</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Campaign</label>
+                        <select id="filter-campaign" class="custom-select">
+                            <option value="all">All Campaigns</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="slider-header"
+                            style="display:flex; justify-content:space-between; margin-bottom:0.5rem; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">
+                            <label>Min Power Score</label>
+                            <span id="score-val" style="color:#8b5cf6; font-weight:600;">50</span>
+                        </div>
+                        <input type="range" id="filter-score" min="0" max="200" value="50"
+                            style="width:100%; cursor:pointer;">
+                    </div>
+
+                    <div class="filter-group toggle-group">
+                        <div class="toggle-label">
+                            <span>Decisioned Only</span>
+                            <i data-lucide="help-circle" class="tooltip-icon"
+                                title="Only show campaigns marked as Decisioned"></i>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="filter-decisioned">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="btn-calculate" class="btn primary full-width">
+                        <i data-lucide="calculator"></i> Run Analysis
+                    </button>
+                    <button id="btn-view-data" class="btn secondary full-width active">
+                        <i data-lucide="table"></i> Data View
+                    </button>
+                    <button id="btn-email-view" class="btn secondary full-width">
+                        <i data-lucide="mail"></i> Email Builder
+                    </button>
+                </div>
+
+                <div class="reset-section">
+                    <button id="btn-reset-file" class="btn text-btn danger">
+                        <i data-lucide="trash-2"></i> Reset File
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <div class="content-area">
+                <!-- Stats Row -->
+                <div class="stats-grid">
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon"><i data-lucide="layers"></i></div>
+                        <div class="stat-info">
+                            <span class="label">Total Campaigns</span>
+                            <h2 id="stat-total-campaigns">0</h2>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon"><i data-lucide="check-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="label">Qualifying Opportunities</span>
+                            <h2 id="stat-qualifying">0</h2>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel highlight-card">
+                        <div class="stat-icon"><i data-lucide="trending-up"></i></div>
+                        <div class="stat-info">
+                            <span class="label">Total Incremental Opportunity</span>
+                            <h2 id="stat-opportunity">$0.00</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Table View -->
+                <div id="view-data" class="view-panel active">
+                    <div class="panel-header glass-panel">
+                        <div class="header-left">
+                            <h3 id="table-title">Campaign Dataset</h3>
+                        </div>
+                        <div class="header-right">
+                            <span id="record-count" class="badge">0 records</span>
+                        </div>
+                    </div>
+                    <div class="table-wrapper glass-panel">
+                        <table id="data-table">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Email Builder View -->
+                <div id="view-email" class="view-panel hidden">
+                    <div class="email-layout glass-panel">
+                        <div class="email-config">
+                            <h3><i data-lucide="mail-plus"></i> Compose Email</h3>
+
+                            <div class="form-group">
+                                <label>Aggregation Level</label>
+                                <select id="email-template-type" class="custom-select">
+                                    <option value="partner">By Partner (Aggregated)</option>
+                                    <option value="advertiser">By Advertiser</option>
+                                    <option value="campaign">Single Campaign</option>
+                                </select>
+                                <small class="hint-text">Choose how to group the opportunities.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Template Style</label>
+                                <select id="email-style" class="custom-select">
+                                    <option value="standard">Standard (Detailed)</option>
+                                    <option value="executive">Executive Summary (High Level)</option>
+                                    <option value="action">Quick Action (Urgent)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label id="email-target-label">Select Partner</label>
+                                <select id="email-target-select" class="custom-select">
+                                    <option value="">-- Select --</option>
+                                </select>
+                            </div>
+
+                            <button id="btn-generate-email" class="btn primary full-width">
+                                Generate Draft
+                            </button>
+                        </div>
+
+                        <div class="email-preview-pane">
+                            <div class="preview-header">
+                                <label>Preview</label>
+                                <button id="btn-copy-email" class="btn small"><i data-lucide="copy"></i> Copy</button>
+                            </div>
+                            <textarea id="email-output" readonly
+                                placeholder="Generated email content will appear here..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/xlsx.full.min.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        // Initialize icons immediately
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        });
+    </script>
+</body>
+
+</html>

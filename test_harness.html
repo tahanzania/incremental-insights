@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Test Harness</title>
+    <!-- Dependencies -->
+    <script src="js/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Functions to test -->
+    <!-- We need to expose AppState etc globally or just copy paste the script logic here to test it? 
+         Better to include app.js. But app.js runs 'init' on DOMContentLoaded.
+         We can override UI references or mock DOM. -->
+</head>
+
+<body>
+    <div id="log" style="white-space: pre; font-family: monospace;"></div>
+
+    <!-- Mock UI Elements required by app.js -->
+    <div id="drop-area"></div>
+    <input type="file" id="file-input">
+    <div id="upload-section"></div>
+    <main id="dashboard-section" class="hidden">
+        <select id="filter-partner">
+            <option>All</option>
+        </select>
+        <select id="filter-advertiser">
+            <option>All</option>
+        </select>
+        <select id="filter-campaign">
+            <option>All</option>
+        </select>
+        <input type="checkbox" id="filter-decisioned">
+        <button id="btn-calculate"></button>
+        <button id="btn-reset-file"></button>
+        <button id="btn-view-data"></button>
+        <button id="btn-email-view"></button>
+        <div id="stat-total-campaigns"></div>
+        <div id="stat-qualifying"></div>
+        <div id="stat-opportunity"></div>
+        <div id="view-data"></div>
+        <div id="view-email"></div>
+        <h3 id="table-title"></h3>
+        <span id="record-count"></span>
+        <table id="data-table">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+        <select id="email-template-type">
+            <option value="partner">P</option>
+        </select>
+        <label id="email-target-label"></label>
+        <select id="email-target-select"></select>
+        <button id="btn-generate-email"></button>
+        <textarea id="email-output"></textarea>
+        <button id="btn-copy-email"></button>
+    </main>
+
+    <script src="js/app.js"></script>
+
+    <script>
+        function log(msg) {
+            document.getElementById('log').innerText += msg + "\n";
+            console.log(msg);
+        }
+
+        window.onload = function () {
+            log("Starting Test...");
+
+            // Mock Data based on User Request
+            const mockData = [
+                {
+                    "Campaign": "Test Campaign 1",
+                    "Partner": "GroupM",
+                    "Advertiser": "Draw Based Games",
+                    "Market Type": "Decisioned",
+                    "Avg. Campaign Daily Incremental Budget": "2,299", // String with comma
+                    "Pacing": "97%",
+                    "Flight Days Remaining": "114",
+                    "Avg. Campaign Decision Power Score": "100" // Boundary
+                },
+                {
+                    "Campaign": "Test Campaign 2",
+                    "Partner": "GroupM",
+                    "Advertiser": "Lotto 649",
+                    "Market Type": "Decisioned",
+                    "Avg. Campaign Daily Incremental Budget": "11,478",
+                    "Pacing": "1.00", // Float string
+                    "Flight Days Remaining": "114",
+                    "Avg. Campaign Decision Power Score": "145" // High Score
+                }
+            ];
+
+            try {
+                log("Calling normalizeData with mock data...");
+                normalizeData(mockData);
+                log("normalizeData produced: " + JSON.stringify(AppState.processedData, null, 2));
+
+                log("Checking parsing of Budget '2,299'...");
+                const row1 = AppState.processedData[0];
+                if (row1.incrementalBudget === 2299) {
+                    log("PASS: Budget parsed correctly as 2299");
+                } else {
+                    log("FAIL: Budget parsed as " + row1.incrementalBudget);
+                }
+
+                log("Checking parsing of Pacing '97%'...");
+                if (row1.pacing === 97) {
+                    log("PASS: Pacing parsed as 97");
+                } else {
+                    log("FAIL: Pacing parsed as " + row1.pacing);
+                }
+
+                log("Checking Pacing 1.00...");
+                const row2 = AppState.processedData[1];
+                if (row2.pacing === 1) {
+                    log("PASS: Pacing parsed as 1");
+                } else {
+                    log("FAIL: Pacing parsed as " + row2.pacing);
+                }
+
+                log("Running Calculation...");
+                runCalculation();
+                log("Qualifying Count: " + AppState.meta.qualifyingCount);
+
+                // Row 2 should qualify: Pacing 1(100%) and Score 145 > 100
+                // Row 1: Pacing 97%. Logic is > 99%. 97 is clearly not 100%. 
+                // Wait. Pacing 97% -> 97.
+                // Logic: if (pacing >= 99 && pacing <= 101) OR (pacing >= 0.99 && pacing <= 1.01).
+                // 97 is neither. So row 1 fails.
+                // Row 2: Pacing 1. 1 >= 0.99 && 1 <= 1.01. TRUE.
+                // Score 145 > 100. TRUE.
+                // Should qualify.
+
+                if (AppState.meta.qualifyingCount >= 1) {
+                    log("PASS: Calculation logic worked.");
+                } else {
+                    log("FAIL: No qualifying campaigns found.");
+                }
+
+                log("TEST COMPLETE");
+
+            } catch (e) {
+                log("ERROR: " + e.toString());
+                log(e.stack);
+            }
+        };
+    </script>
+</body>
+
+</html>
