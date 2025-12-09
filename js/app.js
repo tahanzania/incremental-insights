@@ -60,6 +60,11 @@ const UI = {
     filterKpiContainer: document.getElementById('filter-kpi-container'), // Checklist container
     filterBeatingKpi: document.getElementById('filter-beating-kpi'),
 
+    // Help View
+    btnHelp: document.getElementById('btn-help'),
+    btnBackHome: document.getElementById('btn-back-home'),
+    howItWorksSection: document.getElementById('how-it-works-section'),
+
     // Stats
     statTotal: document.getElementById('stat-total-campaigns'),
     statQualifying: document.getElementById('stat-qualifying'),
@@ -97,6 +102,7 @@ function init() {
     setupFilterListeners();
     setupNavigation();
     setupEmailBuilder();
+    setupHelpListeners(); // New listener logic
 }
 
 // --- File Upload & Parsing ---
@@ -556,6 +562,30 @@ function setupEmailBuilder() {
     UI.emailTemplateType.addEventListener('change', updateEmailTargets);
     UI.btnGenerateEmail.addEventListener('click', generateEmail);
     UI.btnCopyEmail.addEventListener('click', copyEmail);
+}
+
+function setupHelpListeners() {
+    UI.btnHelp.addEventListener('click', () => toggleHelp(true));
+    UI.btnBackHome.addEventListener('click', () => toggleHelp(false));
+}
+
+function toggleHelp(show) {
+    if (show) {
+        // Save current view state implicitly by verifying which one is not hidden later
+        // Just hide both main sections and show help
+        UI.uploadSection.classList.add('hidden');
+        UI.dashboardSection.classList.add('hidden');
+        UI.howItWorksSection.classList.remove('hidden');
+    } else {
+        // Return. If data processed, go to dashboard. Else upload.
+        UI.howItWorksSection.classList.add('hidden');
+
+        if (AppState.processedData.length > 0) {
+            UI.dashboardSection.classList.remove('hidden');
+        } else {
+            UI.uploadSection.classList.remove('hidden');
+        }
+    }
 }
 
 function updateEmailTargets() {

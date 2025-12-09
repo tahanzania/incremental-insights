@@ -30,9 +30,14 @@
                     <span class="subtitle">Campaign Optimization Tool</span>
                 </div>
             </div>
-            <div class="privacy-badge">
-                <i data-lucide="shield-check"></i>
-                <span>100% Local Processing</span>
+            <div style="display:flex; gap:1rem; align-items:center;">
+                <button id="btn-help" class="btn text-btn" style="color:var(--primary); font-weight:600;">
+                    <i data-lucide="help-circle"></i> How it Works
+                </button>
+                <div class="privacy-badge">
+                    <i data-lucide="shield-check"></i>
+                    <span>100% Local Processing</span>
+                </div>
             </div>
         </header>
 
@@ -56,6 +61,72 @@
                         <i data-lucide="info"></i>
                         <p>Required fields: Partner, Advertiser, Campaign, Decision Power Score, Budget, etc.</p>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works View -->
+        <section id="how-it-works-section" class="hidden" style="padding:2rem; overflow-y:auto;">
+            <div class="glass-card" style="max-width:800px; margin:0 auto; padding:3rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem;">
+                    <h2>How Incremental Insights Works</h2>
+                    <button id="btn-back-home" class="btn secondary">
+                        <i data-lucide="arrow-left"></i> Back to App
+                    </button>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:2rem; line-height:1.6; color:var(--text-main);">
+
+                    <div>
+                        <h3 style="color:var(--primary); margin-bottom:0.5rem;">1. Purpose</h3>
+                        <p>This tool helps media teams identify incremental budget opportunities by finding
+                            high-performing campaigns that are capped on budget (pacing at ~100%). It calculates how
+                            much additional spend could be absorbed based on the remaining flight days.</p>
+                    </div>
+
+                    <div>
+                        <h3 style="color:var(--primary); margin-bottom:0.5rem;">2. Upload Data</h3>
+                        <p>Upload a standard Excel or CSV export from your campaign management platform. The tool
+                            processes everything locally in your browser—no data is uploaded to any server.</p>
+                        <ul style="list-style:disc; margin-left:1.5rem; margin-top:0.5rem; color:var(--text-muted);">
+                            <li><strong>Required Columns:</strong> Partner, Advertiser, Campaign, Decision Power Score,
+                                Daily Incremental Budget, Pacing, Days Remaining.</li>
+                            <li><strong>KPI Columns:</strong> KPI Type, Average KPI Value, Goal Value (for performance
+                                vs. goal analysis).</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 style="color:var(--primary); margin-bottom:0.5rem;">3. Analysis Logic</h3>
+                        <p>The tool filters for "Incremental Opportunities" based on strict criteria:</p>
+                        <ul style="list-style:disc; margin-left:1.5rem; margin-top:0.5rem; color:var(--text-muted);">
+                            <li><strong>High Pacing:</strong> The campaign must be pacing at or above the threshold
+                                (Default: 99%). This indicates it is fully utilizing its current daily budget.</li>
+                            <li><strong>High Decision Power:</strong> The campaign must have a Decision Power Score
+                                above the selected threshold (Default: 50). This score represents the AI's confidence in
+                                the campaign's performance signal.</li>
+                        </ul>
+                        <p style="margin-top:0.5rem;"><strong>Formula:</strong>
+                            <code>Opportunity = Daily Incremental Budget × Remaining Flight Days</code></p>
+                    </div>
+
+                    <div>
+                        <h3 style="color:var(--primary); margin-bottom:0.5rem;">4. KPI Performance</h3>
+                        <p>The tool evaluates if a campaign is beating its KPI goal:</p>
+                        <ul style="list-style:disc; margin-left:1.5rem; margin-top:0.5rem; color:var(--text-muted);">
+                            <li><strong>CPA/Cost Metrics:</strong> considered "Beating" if the Average Value is
+                                <strong>lower</strong> than the Goal.</li>
+                            <li><strong>CTR/VCR/Reach:</strong> considered "Beating" if the Average Value is
+                                <strong>higher</strong> than the Goal.</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 style="color:var(--primary); margin-bottom:0.5rem;">5. Actions</h3>
+                        <p>Use the <strong>Email Builder</strong> to generate pre-formatted templates (Executive
+                            Summary, Action Required, etc.) to request budget approval from stakeholders.</p>
+                    </div>
+
                 </div>
             </div>
         </section>
