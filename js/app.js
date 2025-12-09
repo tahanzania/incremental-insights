@@ -214,7 +214,7 @@ function normalizeData(json) {
                             val = val * 100;
                         }
                     }
-                } else if (['score', 'incrementalBudget', 'daysRemaining'].includes(key)) {
+                } else if (['score', 'incrementalBudget', 'daysRemaining', 'avgKpiValue', 'goalValue'].includes(key)) {
                     val = parseFloat(cleanedStr) || 0;
                 } else {
                     val = String(val).trim(); // Text fields
@@ -407,8 +407,8 @@ function updateStats(data) {
 
 function renderTable(data) {
     // Columns to show
-    const keys = ['partner', 'advertiser', 'campaign', 'decisioned', 'score', 'daysRemaining', 'pacing', 'incrementalBudget', 'calculatedOpportunity'];
-    const headers = ['Partner', 'Advertiser', 'Campaign', 'Type', 'KPI Perf.', 'Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
+    const keys = ['partner', 'advertiser', 'campaign', 'kpiType', 'avgKpiValue', 'goalValue', 'kpiPerfRatio', 'score', 'daysRemaining', 'pacing', 'incrementalBudget', 'calculatedOpportunity'];
+    const headers = ['Partner', 'Advertiser', 'Campaign', 'Goal Type', 'Avg. KPI', 'Goal', 'KPI Perf.', 'Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
 
     // Header
     let htmlHead = '<tr>';
@@ -429,12 +429,16 @@ function renderTable(data) {
         // Let's stick to the raw ratio formatted nicely, e.g. "1.20x" or "120%"
         const perf = item.kpiPerfRatio ? formatRatio(item.kpiPerfRatio) : '-';
         const color = item.beatingGoalBool ? 'var(--success)' : '#ef4444'; // Green or Red
+        const formattedKpi = formatKpi(item.avgKpiValue, item.kpiType);
+        const formattedGoal = formatKpi(item.goalValue, item.kpiType);
 
         return `<tr>
             <td>${item.partner || '-'}</td>
             <td>${item.advertiser || '-'}</td>
             <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">${item.campaign || '-'}</div></td>
             <td>${item.kpiType || item.decisioned || '-'}</td>
+            <td>${formattedKpi}</td>
+            <td>${formattedGoal}</td>
             <td style="color:${color}; font-weight:500;">${perf}</td>
             <td>${item.score || 0}</td>
             <td>${item.daysRemaining || 0}</td>
@@ -591,6 +595,8 @@ function generateEmail() {
             body += `  - Opportunity: ${formatCurrency(opp.calculatedOpportunity)}\n`;
             body += `  - Days Remaining: ${opp.daysRemaining}\n`;
             body += `  - Current Pacing: ${formatPercent(opp.pacing)}\n`;
+            body += `  - Avg. KPI: ${formatKpi(opp.avgKpiValue, opp.kpiType)}\n`;
+            body += `  - KPI Goal: ${formatKpi(opp.goalValue, opp.kpiType)}\n`;
             body += `  - KPI Performance: ${formatRatio(opp.kpiPerfRatio)} (Goal Beaten: ${opp.beatingGoalBool ? 'Yes' : 'No'})\n`;
             body += `  - Decision Power Score: ${opp.score}\n\n`;
         });
@@ -621,6 +627,47 @@ function formatRatio(val) {
     if (val === undefined || val === null || isNaN(val)) return '-';
     // Always convert ratio to percentage: 1.2 -> 120%, 0.8 -> 80%
     return Math.round(val * 100) + '%';
+}
+
+function formatNumber(val) {
+    if (val === undefined || val === null || isNaN(val)) return '0';
+    return new Intl.NumberFormat('en-US').format(val);
+}
+
+function formatKpi(val, type) {
+    if (!type || val === undefined || val === null || isNaN(val)) return val || '-';
+
+    const t = type.toLowerCase();
+
+    // Currency Types
+    if (t.includes('cpa') || t.includes('revenue') || t.includes('cost')) {
+        return formatCurrency(val);
+    }
+
+    // Percentage Types
+    if (t.includes('ctr') || t.includes('vcr') || t.includes('rate')) {
+        // Assume raw values are already in correct scale, just append %
+        // User example: 0.27 -> 0.27%, 92.7 -> 92.7%
+        // We can limit decimals to 2?
+        // If integer, don't add decimals.
+        return parseFloat(val) + '%';
+    }
+
+    // Human Counts
+    if (t === 'incremental reach') {
+        return '+' + formatNumber(val) + ' people';
+    }
+
+    if (t.includes('reach') || t.includes('users') || t.includes('visitors')) {
+        return formatNumber(val);
+    }
+
+    if (t === 'no goal' || t === 'none' || t === 'n/a') {
+        return 'N/A';
+    }
+
+    // Default
+    return formatNumber(val);
 }
 
 // Start
