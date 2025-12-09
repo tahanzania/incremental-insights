@@ -12,8 +12,7 @@ const AppState = {
         partner: 'all',
         advertiser: 'all',
         campaign: 'all',
-        decisioned: false,
-        kpiType: 'all',
+        kpiTypes: new Set(), // Changed to Set for multi-select
         beatingKpi: false
     },
     meta: {
@@ -56,8 +55,9 @@ const UI = {
     filterCampaign: document.getElementById('filter-campaign'),
     filterScore: document.getElementById('filter-score'),
     scoreVal: document.getElementById('score-val'),
-    filterDecisioned: document.getElementById('filter-decisioned'),
-    filterKpiType: document.getElementById('filter-kpi-type'),
+    filterPacing: document.getElementById('filter-pacing'), // New
+    pacingVal: document.getElementById('pacing-val'), // New
+    filterKpiContainer: document.getElementById('filter-kpi-container'), // Checklist container
     filterBeatingKpi: document.getElementById('filter-beating-kpi'),
 
     // Stats
@@ -239,8 +239,29 @@ function normalizeData(json) {
         }
 
         // Normalize beatingGoal to boolean
-        const bg = String(normalized.beatingGoal).toLowerCase();
-        normalized.beatingGoalBool = bg === 'true' || bg === 'yes' || bg === '1';
+        // RECALCULATE based on user rule:
+        // CPA/Cost: Beats if under goal.
+        // Others: Beats if over goal.
+
+        let calculatedBeating = false;
+        const type = String(normalized.kpiType).toLowerCase();
+
+        if (type.includes('cpa') || type.includes('cost')) {
+            // Lower is better
+            // Beating if Avg <= Goal (and Goal is not 0)
+            if (goal > 0 && avg <= goal) calculatedBeating = true;
+        } else {
+            // Higher is better (CTR, VCR, ROAS)
+            if (avg >= goal) calculatedBeating = true;
+        }
+
+        // Use calculated if goal exists, otherwise fallback to CSV
+        if (goal > 0) {
+            normalized.beatingGoalBool = calculatedBeating;
+        } else {
+            const bg = String(normalized.beatingGoal).toLowerCase();
+            normalized.beatingGoalBool = bg === 'true' || bg === 'yes' || bg === '1';
+        }
 
         // Default 'calculatedOpportunity'
         normalized.calculatedOpportunity = 0;
@@ -275,11 +296,42 @@ function populateFilters(data) {
     const advertisers = [...new Set(data.map(d => d.advertiser).filter(Boolean))].sort();
     const campaigns = [...new Set(data.map(d => d.campaign).filter(Boolean))].sort();
     const kpiTypes = [...new Set(data.map(d => d.kpiType).filter(Boolean))].sort();
-
     fillSelect(UI.filterPartner, partners);
     fillSelect(UI.filterAdvertiser, advertisers);
     fillSelect(UI.filterCampaign, campaigns);
-    fillSelect(UI.filterKpiType, kpiTypes);
+
+    // KPI Types - Checkbox List
+    UI.filterKpiContainer.innerHTML = '';
+
+    if (kpiTypes.length === 0) {
+        UI.filterKpiContainer.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">No KPI Types found</span>';
+    } else {
+        kpiTypes.forEach(type => {
+            const label = document.createElement('label');
+            label.style.display = 'flex';
+            label.style.alignItems = 'center';
+            label.style.gap = '0.5rem';
+            label.style.fontSize = '0.9rem';
+            label.style.color = 'var(--text-main)';
+            label.style.cursor = 'pointer';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = type;
+            checkbox.classList.add('kpi-checkbox');
+
+            // Default: Select all EXCEPT "No Goal"
+            const lower = type.toLowerCase();
+            if (lower !== 'no goal' && lower !== 'none' && lower !== 'n/a') {
+                checkbox.checked = true;
+            }
+
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(type));
+
+            UI.filterKpiContainer.appendChild(label);
+        });
+    }
 }
 
 function fillSelect(select, values) {
@@ -298,16 +350,28 @@ function fillSelect(select, values) {
 }
 
 function setupFilterListeners() {
-    const inputs = [UI.filterPartner, UI.filterAdvertiser, UI.filterCampaign, UI.filterDecisioned, UI.filterKpiType, UI.filterBeatingKpi];
+    const inputs = [UI.filterPartner, UI.filterAdvertiser, UI.filterCampaign, UI.filterBeatingKpi];
     inputs.forEach(input => {
         input.addEventListener('change', applyFilters);
     });
+
+    // Delegate changes from checklist
+    if (UI.filterKpiContainer) {
+        UI.filterKpiContainer.addEventListener('change', applyFilters);
+    }
 
     // Slider listener
     if (UI.filterScore) {
         UI.filterScore.addEventListener('input', (e) => {
             UI.scoreVal.textContent = e.target.value;
             // Debounce or just run? It's client side, just run.
+            runCalculation();
+        });
+    }
+
+    if (UI.filterPacing) {
+        UI.filterPacing.addEventListener('input', (e) => {
+            UI.pacingVal.textContent = e.target.value + '%';
             runCalculation();
         });
     }
@@ -326,27 +390,22 @@ function applyFilters() {
     const fPartner = UI.filterPartner.value;
     const fAdvertiser = UI.filterAdvertiser.value;
     const fCampaign = UI.filterCampaign.value;
-    const fDecisioned = UI.filterDecisioned.checked;
-    const fKpiType = UI.filterKpiType.value;
+
+    // Get all checked boxes
+    const checkedBoxes = UI.filterKpiContainer.querySelectorAll('.kpi-checkbox:checked');
+    const selectedKpiTypes = Array.from(checkedBoxes).map(cb => cb.value);
+
     const fBeatingKpi = UI.filterBeatingKpi.checked;
 
     AppState.processedData = AppState.rawData.filter(item => {
         if (fPartner !== 'all' && item.partner !== fPartner) return false;
         if (fAdvertiser !== 'all' && item.advertiser !== fAdvertiser) return false;
         if (fCampaign !== 'all' && item.campaign !== fCampaign) return false;
-        if (fKpiType !== 'all' && item.kpiType !== fKpiType) return false;
+
+        // Multi-select KPI check
+        if (!selectedKpiTypes.includes(item.kpiType)) return false;
 
         if (fBeatingKpi && !item.beatingGoalBool) return false;
-
-        if (fDecisioned) {
-            // Check fuzzy "Decisioned" or "Yes" or "True"
-            const dVal = String(item.decisioned).toLowerCase();
-            const isDecisioned = dVal.includes('decisioned') || dVal === 'yes' || dVal === 'true' || dVal === '1';
-            const isNonDecisioned = dVal.includes('non'); // handle "Non-Decisioned"
-
-            if (isNonDecisioned) return false;
-            if (!isDecisioned) return false;
-        }
 
         return true;
     });
@@ -362,22 +421,23 @@ function runCalculation() {
 
     // Get dynamic threshold
     const scoreThreshold = UI.filterScore ? parseInt(UI.filterScore.value) : 100;
+    const pacingThreshold = UI.filterPacing ? parseInt(UI.filterPacing.value) : 99;
 
     AppState.processedData.forEach(item => {
         // Logic:
-        // Pacing at 100% (We'll assume > 99%)
+        // Pacing > Threshold
         // AND Power Score > Threshold
 
-        let isPacing100 = false;
+        let isPacingHigh = false;
         // Or "1" if formatted number.
         // We look for "At or near 100" or exceeding 100
 
-        // Normalized to 0-100 scale. Allow >= 99% (including 104%, 120% etc)
-        if (item.pacing >= 99) isPacing100 = true;
+        // Normalized to 0-100 scale.
+        if (item.pacing >= pacingThreshold) isPacingHigh = true;
 
         const isScoreHigh = item.score > scoreThreshold;
 
-        if (isPacing100 && isScoreHigh) {
+        if (isPacingHigh && isScoreHigh) {
             // Compute: Incremental Budget * Days Remaining
             const opp = item.incrementalBudget * item.daysRemaining;
             item.calculatedOpportunity = opp;

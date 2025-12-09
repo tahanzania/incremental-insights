@@ -96,27 +96,27 @@
                             <label>Min Power Score</label>
                             <span id="score-val" style="color:#8b5cf6; font-weight:600;">50</span>
                         </div>
-                        <input type="range" id="filter-score" min="0" max="200" value="50"
+                        <input type="range" id="filter-score" min="0" max="99" value="50"
                             style="width:100%; cursor:pointer;">
                     </div>
 
-                    <div class="filter-group toggle-group">
-                        <div class="toggle-label">
-                            <span>Decisioned Only</span>
-                            <i data-lucide="help-circle" class="tooltip-icon"
-                                title="Only show campaigns marked as Decisioned"></i>
+                    <div class="filter-group">
+                        <div class="slider-header"
+                            style="display:flex; justify-content:space-between; margin-bottom:0.5rem; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">
+                            <label>Min Pacing %</label>
+                            <span id="pacing-val" style="color:#8b5cf6; font-weight:600;">99%</span>
                         </div>
-                        <label class="switch">
-                            <input type="checkbox" id="filter-decisioned">
-                            <span class="slider round"></span>
-                        </label>
+                        <input type="range" id="filter-pacing" min="0" max="150" value="99"
+                            style="width:100%; cursor:pointer;">
                     </div>
 
                     <div class="filter-group">
                         <label>KPI Type</label>
-                        <select id="filter-kpi-type" class="custom-select">
-                            <option value="all">All KPI Types</option>
-                        </select>
+                        <div id="filter-kpi-container" class="checkbox-list"
+                            style="display:flex; flex-direction:column; gap:0.5rem; padding:0.5rem; background:rgba(0,0,0,0.2); border-radius:0.5rem; max-height:150px; overflow-y:auto;">
+                            <!-- Checkboxes populated by JS -->
+                        </div>
+
                     </div>
 
                     <div class="filter-group toggle-group">
