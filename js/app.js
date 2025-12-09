@@ -12,7 +12,9 @@ const AppState = {
         partner: 'all',
         advertiser: 'all',
         campaign: 'all',
-        decisioned: false
+        decisioned: false,
+        kpiType: 'all',
+        beatingKpi: false
     },
     meta: {
         totalOpportunity: 0,
@@ -30,9 +32,15 @@ const FIELD_MAPPING_CONFIG = {
     decisioned: ['Market Type', 'Decisioned', 'Decisioned/Non-Decisioned'],
     score: ['Avg. Campaign Decision Power Score', 'Decision Power Score', 'Score'],
     // User data specific header
-    incrementalBudget: ['Avg. Campaign Daily Incremental Budget', 'Campaign Incremental Budget', 'Daily Budget'],
+    incrementalBudget: ['Avg. Campaign Daily Incremental Budget', 'Avg. Campaign Daily Incremental Budget Ideal', 'Campaign Incremental Budget', 'Daily Budget'],
     daysRemaining: ['Flight Days Remaining', 'Days Remaining', 'Remaining Days'],
-    pacing: ['Pacing', 'Pacing Percentage']
+    pacing: ['Pacing', 'Pacing Percentage', 'Campaign Pacing'],
+
+    // New Fields
+    beatingGoal: ['Beating KPI Goal'],
+    kpiType: ['Goal Type', 'KPI Type'],
+    goalValue: ['Goal Value'],
+    avgKpiValue: ['Average KPI Value']
 };
 
 // --- DOM References ---
@@ -49,6 +57,8 @@ const UI = {
     filterScore: document.getElementById('filter-score'),
     scoreVal: document.getElementById('score-val'),
     filterDecisioned: document.getElementById('filter-decisioned'),
+    filterKpiType: document.getElementById('filter-kpi-type'),
+    filterBeatingKpi: document.getElementById('filter-beating-kpi'),
 
     // Stats
     statTotal: document.getElementById('stat-total-campaigns'),
@@ -190,15 +200,19 @@ function normalizeData(json) {
 
             // Clean value (logic for comma removal etc)
             if (val !== undefined && val !== null) {
-                // Remove commas for number parsing: "2,299" -> "2299"
-                const cleanedStr = String(val).replace(/,/g, '');
+                // Clean value: remove commas and currency symbols ($)
+                const cleanedStr = String(val).replace(/[$,]/g, '');
 
                 if (key === 'pacing') {
-                    // Handle "98%" or "0.98" strings
                     if (String(val).includes('%')) {
+                        // "98%" -> 98
                         val = parseFloat(cleanedStr.replace('%', ''));
                     } else {
                         val = parseFloat(cleanedStr);
+                        // Heuristic: If value is small (<= 10), assume ratio (1.03 -> 103%)
+                        if (!isNaN(val) && val <= 10) {
+                            val = val * 100;
+                        }
                     }
                 } else if (['score', 'incrementalBudget', 'daysRemaining'].includes(key)) {
                     val = parseFloat(cleanedStr) || 0;
@@ -212,6 +226,21 @@ function normalizeData(json) {
 
             normalized[key] = val;
         }
+
+        // Calculate KPI Performance Ratio
+        // (Average KPI Value / Goal Value) as requested
+        const avg = parseFloat(normalized.avgKpiValue) || 0;
+        const goal = parseFloat(normalized.goalValue) || 0;
+
+        if (goal !== 0) {
+            normalized.kpiPerfRatio = avg / goal;
+        } else {
+            normalized.kpiPerfRatio = 0;
+        }
+
+        // Normalize beatingGoal to boolean
+        const bg = String(normalized.beatingGoal).toLowerCase();
+        normalized.beatingGoalBool = bg === 'true' || bg === 'yes' || bg === '1';
 
         // Default 'calculatedOpportunity'
         normalized.calculatedOpportunity = 0;
@@ -245,10 +274,12 @@ function populateFilters(data) {
     const partners = [...new Set(data.map(d => d.partner).filter(Boolean))].sort();
     const advertisers = [...new Set(data.map(d => d.advertiser).filter(Boolean))].sort();
     const campaigns = [...new Set(data.map(d => d.campaign).filter(Boolean))].sort();
+    const kpiTypes = [...new Set(data.map(d => d.kpiType).filter(Boolean))].sort();
 
     fillSelect(UI.filterPartner, partners);
     fillSelect(UI.filterAdvertiser, advertisers);
     fillSelect(UI.filterCampaign, campaigns);
+    fillSelect(UI.filterKpiType, kpiTypes);
 }
 
 function fillSelect(select, values) {
@@ -267,7 +298,7 @@ function fillSelect(select, values) {
 }
 
 function setupFilterListeners() {
-    const inputs = [UI.filterPartner, UI.filterAdvertiser, UI.filterCampaign, UI.filterDecisioned];
+    const inputs = [UI.filterPartner, UI.filterAdvertiser, UI.filterCampaign, UI.filterDecisioned, UI.filterKpiType, UI.filterBeatingKpi];
     inputs.forEach(input => {
         input.addEventListener('change', applyFilters);
     });
@@ -296,11 +327,16 @@ function applyFilters() {
     const fAdvertiser = UI.filterAdvertiser.value;
     const fCampaign = UI.filterCampaign.value;
     const fDecisioned = UI.filterDecisioned.checked;
+    const fKpiType = UI.filterKpiType.value;
+    const fBeatingKpi = UI.filterBeatingKpi.checked;
 
     AppState.processedData = AppState.rawData.filter(item => {
         if (fPartner !== 'all' && item.partner !== fPartner) return false;
         if (fAdvertiser !== 'all' && item.advertiser !== fAdvertiser) return false;
         if (fCampaign !== 'all' && item.campaign !== fCampaign) return false;
+        if (fKpiType !== 'all' && item.kpiType !== fKpiType) return false;
+
+        if (fBeatingKpi && !item.beatingGoalBool) return false;
 
         if (fDecisioned) {
             // Check fuzzy "Decisioned" or "Yes" or "True"
@@ -333,14 +369,11 @@ function runCalculation() {
         // AND Power Score > Threshold
 
         let isPacing100 = false;
-        // User data often comes as "79%" -> 79, or "100%" -> 100.
         // Or "1" if formatted number.
-        // We look for "At or near 100"
+        // We look for "At or near 100" or exceeding 100
 
-        // Case: Percentage 0-100
-        if (item.pacing >= 99 && item.pacing <= 101) isPacing100 = true;
-        // Case: Float 0-1
-        if (item.pacing >= 0.99 && item.pacing <= 1.01) isPacing100 = true;
+        // Normalized to 0-100 scale. Allow >= 99% (including 104%, 120% etc)
+        if (item.pacing >= 99) isPacing100 = true;
 
         const isScoreHigh = item.score > scoreThreshold;
 
@@ -375,7 +408,7 @@ function updateStats(data) {
 function renderTable(data) {
     // Columns to show
     const keys = ['partner', 'advertiser', 'campaign', 'decisioned', 'score', 'daysRemaining', 'pacing', 'incrementalBudget', 'calculatedOpportunity'];
-    const headers = ['Partner', 'Advertiser', 'Campaign', 'Type', 'Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
+    const headers = ['Partner', 'Advertiser', 'Campaign', 'Type', 'KPI Perf.', 'Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
 
     // Header
     let htmlHead = '<tr>';
@@ -388,11 +421,21 @@ function renderTable(data) {
     const subset = data.slice(0, 100);
 
     UI.tableBody.innerHTML = subset.map(item => {
+        // Format KPI Performance
+        // Show ratio "1.2x" or percentage "120%"? 
+        // User asked for "calculated by (Avg / Goal)", usually a ratio. Let's show as percentage for clarity or just raw number.
+        // User said "show how much we are beating KPI goal". Percentage is standard for "how much". 
+        // 1.2 = 120% of goal (or 20% beating?).
+        // Let's stick to the raw ratio formatted nicely, e.g. "1.20x" or "120%"
+        const perf = item.kpiPerfRatio ? formatRatio(item.kpiPerfRatio) : '-';
+        const color = item.beatingGoalBool ? 'var(--success)' : '#ef4444'; // Green or Red
+
         return `<tr>
             <td>${item.partner || '-'}</td>
             <td>${item.advertiser || '-'}</td>
-            <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;">${item.campaign || '-'}</div></td>
-            <td>${item.decisioned || '-'}</td>
+            <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">${item.campaign || '-'}</div></td>
+            <td>${item.kpiType || item.decisioned || '-'}</td>
+            <td style="color:${color}; font-weight:500;">${perf}</td>
             <td>${item.score || 0}</td>
             <td>${item.daysRemaining || 0}</td>
             <td>${formatPercent(item.pacing)}</td>
@@ -411,12 +454,9 @@ function formatCurrency(val) {
 }
 
 function formatPercent(val) {
-    // If > 1, assume 0-100 scale, add %
-    if (val > 1) return val + '%';
-    // If < 1 (e.g. 0.98), convert to 98%
-    if (val <= 1 && val > 0) return Math.round(val * 100) + '%';
-    // 0
-    return val + '%';
+    if (val === undefined || val === null || isNaN(val)) return '0%';
+    // Assume 0-100 scale now due to normalization
+    return Math.round(val) + '%';
 }
 
 
@@ -551,6 +591,7 @@ function generateEmail() {
             body += `  - Opportunity: ${formatCurrency(opp.calculatedOpportunity)}\n`;
             body += `  - Days Remaining: ${opp.daysRemaining}\n`;
             body += `  - Current Pacing: ${formatPercent(opp.pacing)}\n`;
+            body += `  - KPI Performance: ${formatRatio(opp.kpiPerfRatio)} (Goal Beaten: ${opp.beatingGoalBool ? 'Yes' : 'No'})\n`;
             body += `  - Decision Power Score: ${opp.score}\n\n`;
         });
 
@@ -573,6 +614,13 @@ function copyEmail() {
     UI.btnCopyEmail.innerHTML = `<i data-lucide="check"></i> Copied`;
     if (window.lucide) lucide.createIcons();
     setTimeout(() => UI.btnCopyEmail.innerHTML = original, 2000);
+}
+
+
+function formatRatio(val) {
+    if (val === undefined || val === null || isNaN(val)) return '-';
+    // Always convert ratio to percentage: 1.2 -> 120%, 0.8 -> 80%
+    return Math.round(val * 100) + '%';
 }
 
 // Start

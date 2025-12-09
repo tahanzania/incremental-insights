@@ -100,7 +100,6 @@
                             style="width:100%; cursor:pointer;">
                     </div>
 
-                    <div class="filter-group toggle-group">
                         <div class="toggle-label">
                             <span>Decisioned Only</span>
                             <i data-lucide="help-circle" class="tooltip-icon"
@@ -108,6 +107,25 @@
                         </div>
                         <label class="switch">
                             <input type="checkbox" id="filter-decisioned">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>KPI Type</label>
+                        <select id="filter-kpi-type" class="custom-select">
+                            <option value="all">All KPI Types</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group toggle-group">
+                        <div class="toggle-label">
+                            <span>Beating KPI Goal</span>
+                            <i data-lucide="help-circle" class="tooltip-icon"
+                                title="Only show campaigns that are beating their KPI goal"></i>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="filter-beating-kpi">
                             <span class="slider round"></span>
                         </label>
                     </div>
