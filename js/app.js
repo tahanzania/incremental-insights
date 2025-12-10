@@ -15,6 +15,10 @@ const AppState = {
         kpiTypes: new Set(), // Changed to Set for multi-select
         beatingKpi: false
     },
+    sortConfig: {
+        key: 'calculatedOpportunity',
+        direction: 'desc'
+    },
     meta: {
         totalOpportunity: 0,
         qualifyingCount: 0
@@ -81,6 +85,7 @@ const UI = {
     viewEmail: document.getElementById('view-email'),
     btnViewData: document.getElementById('btn-view-data'),
     btnViewEmail: document.getElementById('btn-email-view'),
+    viewLevelSelect: document.getElementById('view-level-select'), // New aggregation switch
 
     // Actions
     btnCalculate: document.getElementById('btn-calculate'),
@@ -100,7 +105,9 @@ const UI = {
 function init() {
     setupUploadListeners();
     setupFilterListeners();
+    setupFilterListeners();
     setupNavigation();
+    setupViewControls(); // New Listener
     setupEmailBuilder();
     setupHelpListeners(); // New listener logic
 }
@@ -215,11 +222,16 @@ function normalizeData(json) {
                         val = parseFloat(cleanedStr.replace('%', ''));
                     } else {
                         val = parseFloat(cleanedStr);
-                        // Heuristic: If value is small (<= 10), assume ratio (1.03 -> 103%)
-                        if (!isNaN(val) && val <= 10) {
+                        // Heuristic: If value is small (<= 2.0 like 1.05), assume ratio (1.05 -> 105%). 
+                        // If value is > 2.0 (like 98), assume percentage (98 -> 98%).
+                        if (!isNaN(val) && val <= 2.0) {
                             val = val * 100;
                         }
                     }
+
+                    // Cap at 100%
+                    if (val > 100) val = 100;
+                    // Ensure decimals are handled if needed, but 100 is max.
                 } else if (['score', 'incrementalBudget', 'daysRemaining', 'avgKpiValue', 'goalValue'].includes(key)) {
                     val = parseFloat(cleanedStr) || 0;
                 } else {
@@ -392,6 +404,81 @@ function setupFilterListeners() {
     });
 }
 
+function setupViewControls() {
+    if (UI.viewLevelSelect) {
+        UI.viewLevelSelect.addEventListener('change', () => {
+            // Reset sort when changing view? Or keep?
+            // Resetting might be safer as keys change.
+            AppState.sortConfig.key = 'calculatedOpportunity';
+            renderTable(AppState.processedData);
+        });
+    }
+}
+
+// Global function for pivot toggle
+window.togglePivotRow = function (id) {
+    const row = document.getElementById(id);
+    if (!row) return;
+
+    const isExpanded = row.getAttribute('data-expanded') === 'true';
+    row.setAttribute('data-expanded', !isExpanded);
+
+    // Toggle icon
+    const icon = row.querySelector('.pivot-icon');
+    if (icon) {
+        icon.innerHTML = !isExpanded ?
+            `<i data-lucide="chevron-down" width="16" height="16"></i>` :
+            `<i data-lucide="chevron-right" width="16" height="16"></i>`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    // Find children
+    const level = parseInt(row.getAttribute('data-level'));
+    let nextRow = row.nextElementSibling;
+
+    while (nextRow) {
+        const nextLevel = parseInt(nextRow.getAttribute('data-level'));
+        if (nextLevel <= level) break; // End of this block
+
+        // Logic:
+        // If expanding parent: show immediate children (level + 1).
+        // If collapsing parent: hide ALL descendants.
+
+        if (!isExpanded) {
+            // EXPANDING
+            // Only show immediate children
+            if (nextLevel === level + 1) {
+                nextRow.classList.remove('hidden');
+                // Ensure their state is reflected (e.g. if they were expanded, should their children show?
+                // For simplicity, let's keep their children hidden unless they assume 'expanded' state logic which is complex.
+                // Let's just show immediate children as collapsed unless we track state deeply.
+
+                // Better approach: When expanding, we show direct children.
+                // If a direct child was previously expanded, we might want to show its children too, but standard behavior is fine to keep them hidden or restore state.
+                // Simple: Show direct children.
+                nextRow.setAttribute('data-expanded', 'false'); // Reset child expansion? or keep?
+
+                // Let's go with: Show direct children. For grandchildren, check if the direct child is expanded.
+            }
+        } else {
+            // COLLAPSING
+            // Hide everything deeper until sibling
+            nextRow.classList.add('hidden');
+            // We should also visually reset the expansion of children if we want a clean state next time?
+            // Optional.
+        }
+
+        nextRow = nextRow.nextElementSibling;
+    }
+
+    // Re-run expansion check if we want to restore deep state?
+    // Actually, "Toggle" logic usually hides all descendants.
+    // "Expand" usually only shows direct children OR restores previous state.
+    // Let's implement robust "Hide All Descendants" on collapse.
+    // On Expand: Show direct children. If a direct child is marked expanded, show its children?
+    // Let's do simple: Collapse hides all. Expand shows direct children.
+};
+
 function applyFilters() {
     const fPartner = UI.filterPartner.value;
     const fAdvertiser = UI.filterAdvertiser.value;
@@ -471,52 +558,355 @@ function updateStats(data) {
     UI.recordCount.textContent = `${data.length} records`;
 }
 
-function renderTable(data) {
-    // Columns to show
-    const keys = ['partner', 'advertiser', 'campaign', 'kpiType', 'avgKpiValue', 'goalValue', 'kpiPerfRatio', 'score', 'daysRemaining', 'pacing', 'incrementalBudget', 'calculatedOpportunity'];
-    const headers = ['Partner', 'Advertiser', 'Campaign', 'Goal Type', 'Avg. KPI', 'Goal', 'KPI Perf.', 'Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
+function handleTableSort(key) {
+    if (AppState.sortConfig.key === key) {
+        // Toggle direction
+        AppState.sortConfig.direction = AppState.sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        // New key, default to desc for numbers? or asc for text?
+        // Let's standard default to desc for easier view of 'top' items
+        AppState.sortConfig.key = key;
+        AppState.sortConfig.direction = 'desc';
+    }
+    // Re-render
+    renderTable(AppState.processedData);
+}
 
-    // Header
+function renderTable(data) {
+    const viewLevel = UI.viewLevelSelect ? UI.viewLevelSelect.value : 'campaign';
+
+    if (viewLevel === 'pivot') {
+        renderPivotView(data);
+        return;
+    }
+
+    // --- AGGREGATION LOGIC ---
+    let tableData = data;
+
+    if (viewLevel !== 'campaign') {
+        // Aggregation needed
+        const groups = {};
+
+        data.forEach(item => {
+            const key = item[viewLevel] || 'Unknown';
+            if (!groups[key]) {
+                groups[key] = {
+                    name: key,
+                    partner: item.partner, // fallback for advertiser view
+                    count: 0,
+                    calculatedOpportunity: 0,
+                    incrementalBudget: 0,
+                    totalScore: 0,
+                    // We can't easily sum avgKpi without weight, omit for now or show sample
+                };
+            }
+
+            groups[key].count++;
+            groups[key].calculatedOpportunity += (item.calculatedOpportunity || 0);
+            groups[key].incrementalBudget += (item.incrementalBudget || 0);
+            groups[key].totalScore += (item.score || 0);
+        });
+
+        // Convert back to array
+        tableData = Object.values(groups).map(g => ({
+            name: g.name,
+            partner: g.partner,
+            count: g.count,
+            calculatedOpportunity: g.calculatedOpportunity,
+            incrementalBudget: g.incrementalBudget,
+            avgScore: Math.round(g.totalScore / g.count)
+        }));
+    }
+
+
+    // --- SORTING LOGIC ---
+    const { key: sortKey, direction } = AppState.sortConfig;
+
+    // Safety check: if sort key doesn't exist in aggregated data (e.g. 'pacing'), fallback
+    // But 'calculatedOpportunity' exists in both.
+
+    tableData.sort((a, b) => {
+        let valA = a[sortKey];
+        let valB = b[sortKey];
+
+        // Handle fallback logic for missing keys in aggregate view
+        if (valA === undefined) valA = 0;
+        if (valB === undefined) valB = 0;
+
+        const isString = typeof valA === 'string' || typeof valB === 'string';
+        if (isString) {
+            valA = String(valA).toLowerCase();
+            valB = String(valB).toLowerCase();
+        }
+
+        if (valA < valB) return direction === 'asc' ? -1 : 1;
+        if (valA > valB) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+
+    // --- RENDERING ---
+    let headers = [];
+    let keys = [];
+
+    if (viewLevel === 'campaign') {
+        // Detailed View
+        keys = ['partner', 'advertiser', 'campaign', 'kpiType', 'avgKpiValue', 'goalValue', 'kpiPerfRatio', 'score', 'daysRemaining', 'pacing', 'incrementalBudget', 'calculatedOpportunity'];
+        headers = ['Partner', 'Advertiser', 'Campaign', 'Goal Type', 'Avg. KPI', 'Goal', 'KPI Perf.', 'Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
+    } else {
+        // Summary Views
+        if (viewLevel === 'advertiser') {
+            keys = ['name', 'partner', 'count', 'avgScore', 'incrementalBudget', 'calculatedOpportunity'];
+            headers = ['Advertiser', 'Partner', 'Campaigns', 'Avg. Score', 'Total Inc. Budget', 'Total Inc. Opp.'];
+        } else {
+            // Partner
+            keys = ['name', 'count', 'avgScore', 'incrementalBudget', 'calculatedOpportunity'];
+            headers = ['Partner', 'Campaigns', 'Avg. Score', 'Total Inc. Budget', 'Total Inc. Opp.'];
+        }
+    }
+
+    // Header Generation
     let htmlHead = '<tr>';
-    headers.forEach(h => htmlHead += `<th>${h}</th>`);
+    headers.forEach((h, index) => {
+        const key = keys[index];
+        const isSorted = sortKey === key;
+        const arrow = isSorted ? (direction === 'asc' ? '▲' : '▼') : '';
+        htmlHead += `<th style="cursor:pointer;" data-sort-key="${key}">${h} <span style="font-size:0.8rem; margin-left:4px;">${arrow}</span></th>`;
+    });
     htmlHead += '</tr>';
     UI.tableHead.innerHTML = htmlHead;
 
-    // Body
-    // Limit to 100 rows for performance in DOM
-    const subset = data.slice(0, 100);
+    // Attach listeners
+    const ths = UI.tableHead.querySelectorAll('th');
+    ths.forEach(th => {
+        th.addEventListener('click', () => {
+            const key = th.dataset.sortKey;
+            handleTableSort(key);
+        });
+    });
+
+    // Body Render
+    const subset = tableData.slice(0, 100);
 
     UI.tableBody.innerHTML = subset.map(item => {
-        // Format KPI Performance
-        // Show ratio "1.2x" or percentage "120%"? 
-        // User asked for "calculated by (Avg / Goal)", usually a ratio. Let's show as percentage for clarity or just raw number.
-        // User said "show how much we are beating KPI goal". Percentage is standard for "how much". 
-        // 1.2 = 120% of goal (or 20% beating?).
-        // Let's stick to the raw ratio formatted nicely, e.g. "1.20x" or "120%"
-        const perf = item.kpiPerfRatio ? formatRatio(item.kpiPerfRatio) : '-';
-        const color = item.beatingGoalBool ? 'var(--success)' : '#ef4444'; // Green or Red
-        const formattedKpi = formatKpi(item.avgKpiValue, item.kpiType);
-        const formattedGoal = formatKpi(item.goalValue, item.kpiType);
+        if (viewLevel === 'campaign') {
+            // ... existing campaign row logic ...
+            const perf = item.kpiPerfRatio ? formatRatio(item.kpiPerfRatio) : '-';
+            const color = item.beatingGoalBool ? 'var(--success)' : '#ef4444';
+            const formattedKpi = formatKpi(item.avgKpiValue, item.kpiType);
+            const formattedGoal = formatKpi(item.goalValue, item.kpiType);
 
-        return `<tr>
-            <td>${item.partner || '-'}</td>
-            <td>${item.advertiser || '-'}</td>
-            <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">${item.campaign || '-'}</div></td>
-            <td>${item.kpiType || item.decisioned || '-'}</td>
-            <td>${formattedKpi}</td>
-            <td>${formattedGoal}</td>
-            <td style="color:${color}; font-weight:500;">${perf}</td>
-            <td>${item.score || 0}</td>
-            <td>${item.daysRemaining || 0}</td>
-            <td>${formatPercent(item.pacing)}</td>
-            <td>${formatCurrency(item.incrementalBudget)}</td>
-            <td style="color: var(--success); font-weight:600;">${item.calculatedOpportunity > 0 ? formatCurrency(item.calculatedOpportunity) : '-'}</td>
-        </tr>`;
+            return `<tr>
+                <td>${item.partner || '-'}</td>
+                <td>${item.advertiser || '-'}</td>
+                <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">${item.campaign || '-'}</div></td>
+                <td>${item.kpiType || item.decisioned || '-'}</td>
+                <td>${formattedKpi}</td>
+                <td>${formattedGoal}</td>
+                <td style="color:${color}; font-weight:500;">${perf}</td>
+                <td>${item.score || 0}</td>
+                <td>${item.daysRemaining || 0}</td>
+                <td>${formatPercent(item.pacing)}</td>
+                <td>${formatCurrency(item.incrementalBudget)}</td>
+                <td style="color: var(--success); font-weight:600;">${item.calculatedOpportunity > 0 ? formatCurrency(item.calculatedOpportunity) : '-'}</td>
+            </tr>`;
+        } else {
+            // Summary Row
+            // Re-use logic for Advertiser/Partner
+            let row = '<tr>';
+            row += `<td><span style="font-weight:600;">${item.name || 'Unknown'}</span></td>`;
+            if (viewLevel === 'advertiser') {
+                row += `<td>${item.partner || '-'}</td>`;
+            }
+            row += `<td>${item.count}</td>`;
+            row += `<td>${item.avgScore}</td>`;
+            row += `<td>${formatCurrency(item.incrementalBudget)}</td>`;
+            row += `<td style="color: var(--success); font-weight:600;">${formatCurrency(item.calculatedOpportunity)}</td>`;
+            row += '</tr>';
+            return row;
+        }
     }).join('');
 
-    if (data.length > 100) {
-        UI.tableBody.innerHTML += `<tr><td colspan="${headers.length}" style="text-align:center; opacity:0.5;">...and ${data.length - 100} more rows</td></tr>`;
+    if (tableData.length > 100) {
+        UI.tableBody.innerHTML += `<tr><td colspan="${headers.length}" style="text-align:center; opacity:0.5;">...and ${tableData.length - 100} more rows</td></tr>`;
     }
+}
+
+function renderPivotView(data) {
+    // 1. Build Hierarchy
+    // Partner -> Advertiser -> Campaign
+    const tree = {};
+
+    data.forEach(item => {
+        const pName = item.partner || 'Unknown Partner';
+        const aName = item.advertiser || 'Unknown Advertiser';
+
+        if (!tree[pName]) {
+            tree[pName] = {
+                id: `p-${sanitizeId(pName)}`,
+                name: pName,
+                metrics: createMetrics(),
+                children: {}
+            };
+        }
+
+        if (!tree[pName].children[aName]) {
+            tree[pName].children[aName] = {
+                id: `p-${sanitizeId(pName)}-a-${sanitizeId(aName)}`,
+                name: aName,
+                metrics: createMetrics(),
+                children: [] // campaigns list
+            };
+        }
+
+        // Add campaign
+        tree[pName].children[aName].children.push(item);
+
+        // Aggregate Metrics
+        accumulateMetrics(tree[pName].metrics, item);
+        accumulateMetrics(tree[pName].children[aName].metrics, item);
+    });
+
+    // 2. Sort Hierarchy
+    const sortConfig = AppState.sortConfig; // e.g. calculatedOpportunity desc
+    const sortFn = (a, b) => {
+        let valA, valB;
+        // Check if sorting by metric or name
+        if (sortConfig.key === 'partner' || sortConfig.key === 'advertiser' || sortConfig.key === 'campaign') {
+            valA = (a.name || a.campaign || '').toLowerCase();
+            valB = (b.name || b.campaign || '').toLowerCase();
+        } else {
+            // Metrics (calculatedOpportunity, incrementalBudget, score(avg?))
+            valA = a.metrics ? a.metrics[sortConfig.key] : a[sortConfig.key];
+            valB = b.metrics ? b.metrics[sortConfig.key] : b[sortConfig.key];
+
+            // Special case for score in pivot nodes (we store sum and count, need avg for sort?)
+            if (sortConfig.key === 'score' && a.metrics) {
+                valA = a.metrics.score / a.metrics.count;
+                valB = b.metrics.score / b.metrics.count;
+            }
+        }
+
+        valA = valA || 0;
+        valB = valB || 0;
+
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+    };
+
+    const partners = Object.values(tree).sort(sortFn);
+    partners.forEach(p => {
+        // Sort Advertisers
+        const advertisers = Object.values(p.children).sort(sortFn);
+        p.sortedChildren = advertisers;
+
+        advertisers.forEach(a => {
+            // Sort Campaigns
+            a.children.sort(sortFn);
+        });
+    });
+
+    // 3. Render
+    // Headers
+    const headers = [
+        { key: 'partner', label: 'Hierarchy' },
+        { key: 'score', label: 'Avg Score' },
+        { key: 'incrementalBudget', label: 'Inc. Budget' },
+        { key: 'calculatedOpportunity', label: 'Inc. Opportunity' }
+    ];
+
+    let htmlHead = '<tr>';
+    headers.forEach(h => {
+        const isSorted = sortConfig.key === h.key;
+        const arrow = isSorted ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '';
+        htmlHead += `<th style="cursor:pointer;" data-sort-key="${h.key}">${h.label} <span style="font-size:0.8rem; margin-left:4px;">${arrow}</span></th>`;
+    });
+    htmlHead += '</tr>';
+    UI.tableHead.innerHTML = htmlHead;
+
+    // Attach sort listeners
+    UI.tableHead.querySelectorAll('th').forEach(th => {
+        th.addEventListener('click', () => {
+            handleTableSort(th.dataset.sortKey);
+        });
+    });
+
+    // Body logic
+    let htmlBody = '';
+
+    partners.forEach(p => {
+        // Partner Row (Level 1)
+        const pOpp = formatCurrency(p.metrics.calculatedOpportunity);
+        const pBud = formatCurrency(p.metrics.incrementalBudget);
+        const pScore = Math.round(p.metrics.score / p.metrics.count);
+
+        htmlBody += `<tr id="${p.id}" class="pivot-row level-1" data-level="1" data-expanded="false" onclick="togglePivotRow('${p.id}')" style="cursor:pointer; background:rgba(0,0,0,0.02);">
+            <td style="font-weight:700; color:var(--primary);">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <span class="pivot-icon"><i data-lucide="chevron-right" width="16" height="16"></i></span>
+                    ${p.name} <span class="badge" style="font-size:0.75rem;">${p.metrics.count}</span>
+                </div>
+            </td>
+            <td>${pScore}</td>
+            <td>${pBud}</td>
+            <td style="font-weight:600; color:var(--success);">${pOpp}</td>
+        </tr>`;
+
+        p.sortedChildren.forEach(a => {
+            // Advertiser Row (Level 2) - Hidden by default
+            const aOpp = formatCurrency(a.metrics.calculatedOpportunity);
+            const aBud = formatCurrency(a.metrics.incrementalBudget);
+            const aScore = Math.round(a.metrics.score / a.metrics.count);
+
+            htmlBody += `<tr id="${a.id}" class="pivot-row level-2 hidden" data-level="2" data-expanded="false" onclick="togglePivotRow('${a.id}')" style="cursor:pointer;">
+                <td style="padding-left:2.5rem; font-weight:600;">
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span class="pivot-icon"><i data-lucide="chevron-right" width="16" height="16"></i></span>
+                        ${a.name} <span class="badge" style="font-size:0.75rem; background:rgba(0,0,0,0.05);">${a.metrics.count}</span>
+                    </div>
+                </td>
+                <td>${aScore}</td>
+                <td>${aBud}</td>
+                <td style="font-weight:600; color:var(--success);">${aOpp}</td>
+            </tr>`;
+
+            a.children.forEach(c => {
+                // Campaign Row (Level 3) - Hidden by default
+                const cOpp = formatCurrency(c.calculatedOpportunity);
+                const cBud = formatCurrency(c.incrementalBudget);
+                // Extra context for campaigns
+
+                htmlBody += `<tr class="pivot-row level-3 hidden" data-level="3" style="background:rgba(255,255,255,0.5);">
+                    <td style="padding-left:5rem; font-size:0.9rem;">
+                        ${c.campaign}
+                    </td>
+                    <td>${c.score}</td>
+                    <td>${cBud}</td>
+                    <td style="color:var(--success);">${cOpp}</td>
+                </tr>`;
+            });
+        });
+    });
+
+    UI.tableBody.innerHTML = htmlBody;
+    if (window.lucide) lucide.createIcons();
+}
+
+// Helpers
+function createMetrics() {
+    return { count: 0, score: 0, incrementalBudget: 0, calculatedOpportunity: 0 };
+}
+
+function accumulateMetrics(target, item) {
+    target.count++;
+    target.score += (item.score || 0);
+    target.incrementalBudget += (item.incrementalBudget || 0);
+    target.calculatedOpportunity += (item.calculatedOpportunity || 0);
+}
+
+function sanitizeId(str) {
+    return String(str).replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
 }
 
 function formatCurrency(val) {
@@ -525,8 +915,10 @@ function formatCurrency(val) {
 
 function formatPercent(val) {
     if (val === undefined || val === null || isNaN(val)) return '0%';
-    // Assume 0-100 scale now due to normalization
-    return Math.round(val) + '%';
+    // Cap visual display at 100%
+    let num = Math.round(val);
+    if (num > 100) num = 100;
+    return num + '%';
 }
 
 
@@ -684,7 +1076,7 @@ function generateEmail() {
             body += `• ${opp.campaign} (${opp.advertiser})\n`;
             body += `  - Opportunity: ${formatCurrency(opp.calculatedOpportunity)}\n`;
             body += `  - Days Remaining: ${opp.daysRemaining}\n`;
-            body += `  - Current Pacing: ${formatPercent(opp.pacing)}\n`;
+            body += `  - Current Pacing: Pacing Well\n`;
             body += `  - Avg. KPI: ${formatKpi(opp.avgKpiValue, opp.kpiType)}\n`;
             body += `  - KPI Goal: ${formatKpi(opp.goalValue, opp.kpiType)}\n`;
             body += `  - KPI Performance: ${formatRatio(opp.kpiPerfRatio)} (Goal Beaten: ${opp.beatingGoalBool ? 'Yes' : 'No'})\n`;

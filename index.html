@@ -107,7 +107,8 @@
                                 the campaign's performance signal.</li>
                         </ul>
                         <p style="margin-top:0.5rem;"><strong>Formula:</strong>
-                            <code>Opportunity = Daily Incremental Budget × Remaining Flight Days</code></p>
+                            <code>Opportunity = Daily Incremental Budget × Remaining Flight Days</code>
+                        </p>
                     </div>
 
                     <div>
@@ -115,9 +116,11 @@
                         <p>The tool evaluates if a campaign is beating its KPI goal:</p>
                         <ul style="list-style:disc; margin-left:1.5rem; margin-top:0.5rem; color:var(--text-muted);">
                             <li><strong>CPA/Cost Metrics:</strong> considered "Beating" if the Average Value is
-                                <strong>lower</strong> than the Goal.</li>
+                                <strong>lower</strong> than the Goal.
+                            </li>
                             <li><strong>CTR/VCR/Reach:</strong> considered "Beating" if the Average Value is
-                                <strong>higher</strong> than the Goal.</li>
+                                <strong>higher</strong> than the Goal.
+                            </li>
                         </ul>
                     </div>
 
@@ -252,8 +255,15 @@
                 <!-- Data Table View -->
                 <div id="view-data" class="view-panel active">
                     <div class="panel-header glass-panel">
-                        <div class="header-left">
-                            <h3 id="table-title">Campaign Dataset</h3>
+                        <div class="header-left" style="display:flex; align-items:center; gap:1rem;">
+                            <h3 id="table-title" style="margin:0;">Campaign Dataset</h3>
+                            <select id="view-level-select" class="custom-select"
+                                style="width:auto; padding:0.4rem 2rem 0.4rem 0.8rem; font-size:0.85rem;">
+                                <option value="campaign">View: Campaign (Detailed)</option>
+                                <option value="advertiser">View: Advertiser (Summary)</option>
+                                <option value="partner">View: Partner (Summary)</option>
+                                <option value="pivot">View: Pivot Table (Hierarchy)</option>
+                            </select>
                         </div>
                         <div class="header-right">
                             <span id="record-count" class="badge">0 records</span>
