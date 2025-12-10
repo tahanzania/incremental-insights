@@ -184,13 +184,16 @@
                             style="width:100%; cursor:pointer;">
                     </div>
 
-                    <div class="filter-group">
-                        <label>KPI Type</label>
-                        <div id="filter-kpi-container" class="checkbox-list"
-                            style="display:flex; flex-direction:column; gap:0.5rem; padding:0.5rem; background:rgba(0,0,0,0.2); border-radius:0.5rem; max-height:150px; overflow-y:auto;">
-                            <!-- Checkboxes populated by JS -->
+                    <div class="filter-group toggle-group">
+                        <div class="toggle-label">
+                            <span style="color:var(--danger)">Under Pacing Only (&lt;99%)</span>
+                            <i data-lucide="alert-circle" class="tooltip-icon"
+                                title="Show only campaigns pacing below 99%"></i>
                         </div>
-
+                        <label class="switch">
+                            <input type="checkbox" id="filter-under-pacing">
+                            <span class="slider round"></span>
+                        </label>
                     </div>
 
                     <div class="filter-group toggle-group">
@@ -204,127 +207,210 @@
                             <span class="slider round"></span>
                         </label>
                     </div>
+
+                    <div class="filter-group" id="filter-audience-group">
+                        <label>Audience Predictor/Excluder</label>
+                        <div id="filter-audience-container"
+                            style="max-height:150px; overflow-y:auto; background:#fff; border:1px solid #cbd5e1; border-radius:0.5rem; padding:0.5rem; display:flex; flex-direction:column; gap:0.25rem;">
+                            <!-- Checkboxes generated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>KPI Type</label>
+                        <div id="filter-kpi-container" class="checkbox-list"
+                            style="display:flex; flex-direction:column; gap:0.5rem; padding:0.5rem; background:rgba(0,0,0,0.2); border-radius:0.5rem; max-height:150px; overflow-y:auto;">
+                            <!-- Checkboxes populated by JS -->
+                        </div>
+
+                    </div>
+
                 </div>
+    </div>
+    </div>
 
-                <div class="action-buttons">
-                    <button id="btn-calculate" class="btn primary full-width">
-                        <i data-lucide="calculator"></i> Run Analysis
-                    </button>
-                    <button id="btn-view-data" class="btn secondary full-width active">
-                        <i data-lucide="table"></i> Data View
-                    </button>
-                    <button id="btn-email-view" class="btn secondary full-width">
-                        <i data-lucide="mail"></i> Email Builder
-                    </button>
-                </div>
+    <div class="action-buttons">
+        <button id="btn-calculate" class="btn primary full-width">
+            <i data-lucide="calculator"></i> Run Analysis
+        </button>
+        <button id="btn-view-data" class="btn secondary full-width active">
+            <i data-lucide="table"></i> Data View
+        </button>
+        <button id="btn-email-view" class="btn secondary full-width">
+            <i data-lucide="mail"></i> Email Builder (Opportunity)
+        </button>
+        <button id="btn-pacing-email-view" class="btn secondary full-width">
+            <i data-lucide="mail-warning"></i> Email Builder (Pacing)
+        </button>
+    </div>
 
-                <div class="reset-section">
-                    <button id="btn-reset-file" class="btn text-btn danger">
-                        <i data-lucide="trash-2"></i> Reset File
-                    </button>
-                </div>
-            </aside>
+    <div class="reset-section">
+        <button id="btn-reset-file" class="btn text-btn danger">
+            <i data-lucide="trash-2"></i> Reset File
+        </button>
+    </div>
+    </aside>
 
-            <!-- Main Content Area -->
-            <div class="content-area">
-                <!-- Stats Row -->
-                <div class="stats-grid">
-                    <div class="stat-card glass-panel">
-                        <div class="stat-icon"><i data-lucide="layers"></i></div>
-                        <div class="stat-info">
-                            <span class="label">Total Campaigns</span>
-                            <h2 id="stat-total-campaigns">0</h2>
-                        </div>
-                    </div>
-                    <div class="stat-card glass-panel">
-                        <div class="stat-icon"><i data-lucide="check-circle"></i></div>
-                        <div class="stat-info">
-                            <span class="label">Qualifying Opportunities</span>
-                            <h2 id="stat-qualifying">0</h2>
-                        </div>
-                    </div>
-                    <div class="stat-card glass-panel highlight-card">
-                        <div class="stat-icon"><i data-lucide="trending-up"></i></div>
-                        <div class="stat-info">
-                            <span class="label">Total Incremental Opportunity</span>
-                            <h2 id="stat-opportunity">$0.00</h2>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Data Table View -->
-                <div id="view-data" class="view-panel active">
-                    <div class="panel-header glass-panel">
-                        <div class="header-left" style="display:flex; align-items:center; gap:1rem;">
-                            <h3 id="table-title" style="margin:0;">Campaign Dataset</h3>
-                            <select id="view-level-select" class="custom-select"
-                                style="width:auto; padding:0.4rem 2rem 0.4rem 0.8rem; font-size:0.85rem;">
-                                <option value="campaign">View: Campaign (Detailed)</option>
-                                <option value="advertiser">View: Advertiser (Summary)</option>
-                                <option value="partner">View: Partner (Summary)</option>
-                                <option value="pivot">View: Pivot Table (Hierarchy)</option>
-                            </select>
-                        </div>
-                        <div class="header-right">
-                            <span id="record-count" class="badge">0 records</span>
-                        </div>
-                    </div>
-                    <div class="table-wrapper glass-panel">
-                        <table id="data-table">
-                            <thead></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Email Builder View -->
-                <div id="view-email" class="view-panel hidden">
-                    <div class="email-layout glass-panel">
-                        <div class="email-config">
-                            <h3><i data-lucide="mail-plus"></i> Compose Email</h3>
-
-                            <div class="form-group">
-                                <label>Aggregation Level</label>
-                                <select id="email-template-type" class="custom-select">
-                                    <option value="partner">By Partner (Aggregated)</option>
-                                    <option value="advertiser">By Advertiser</option>
-                                    <option value="campaign">Single Campaign</option>
-                                </select>
-                                <small class="hint-text">Choose how to group the opportunities.</small>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Template Style</label>
-                                <select id="email-style" class="custom-select">
-                                    <option value="standard">Standard (Detailed)</option>
-                                    <option value="executive">Executive Summary (High Level)</option>
-                                    <option value="action">Quick Action (Urgent)</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label id="email-target-label">Select Partner</label>
-                                <select id="email-target-select" class="custom-select">
-                                    <option value="">-- Select --</option>
-                                </select>
-                            </div>
-
-                            <button id="btn-generate-email" class="btn primary full-width">
-                                Generate Draft
-                            </button>
-                        </div>
-
-                        <div class="email-preview-pane">
-                            <div class="preview-header">
-                                <label>Preview</label>
-                                <button id="btn-copy-email" class="btn small"><i data-lucide="copy"></i> Copy</button>
-                            </div>
-                            <textarea id="email-output" readonly
-                                placeholder="Generated email content will appear here..."></textarea>
-                        </div>
-                    </div>
+    <!-- Main Content Area -->
+    <div class="content-area">
+        <!-- Stats Row -->
+        <div class="stats-grid">
+            <div class="stat-card glass-panel">
+                <div class="stat-icon"><i data-lucide="layers"></i></div>
+                <div class="stat-info">
+                    <span class="label">Total Campaigns</span>
+                    <h2 id="stat-total-campaigns">0</h2>
                 </div>
             </div>
+            <div class="stat-card glass-panel">
+                <div class="stat-icon"><i data-lucide="check-circle"></i></div>
+                <div class="stat-info">
+                    <span class="label">Qualifying Opportunities</span>
+                    <h2 id="stat-qualifying">0</h2>
+                </div>
+            </div>
+            <div class="stat-card glass-panel highlight-card">
+                <div class="stat-icon"><i data-lucide="trending-up"></i></div>
+                <div class="stat-info">
+                    <span class="label">Total Incremental Opportunity</span>
+                    <h2 id="stat-opportunity">$0.00</h2>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table View -->
+        <div id="view-data" class="view-panel active">
+            <div class="panel-header glass-panel">
+                <div class="header-left" style="display:flex; align-items:center; gap:1rem;">
+                    <h3 id="table-title" style="margin:0;">Campaign Dataset</h3>
+                    <select id="view-level-select" class="custom-select"
+                        style="width:auto; padding:0.4rem 2rem 0.4rem 0.8rem; font-size:0.85rem;">
+                        <option value="pivot" selected>View: Pivot Table (Hierarchy)</option>
+                        <option value="campaign">View: Campaign (Detailed)</option>
+                        <option value="advertiser">View: Advertiser (Summary)</option>
+                        <option value="partner">View: Partner (Summary)</option>
+                    </select>
+                </div>
+                <div class="header-right">
+                    <span id="record-count" class="badge">0 records</span>
+                </div>
+            </div>
+            <div class="table-wrapper glass-panel">
+                <table id="data-table">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Email Builder View -->
+        <div id="view-email" class="view-panel hidden">
+            <div class="email-layout glass-panel">
+                <div class="email-config">
+                    <h3><i data-lucide="mail-plus"></i> Compose Email</h3>
+
+                    <div class="form-group">
+                        <label>Aggregation Level</label>
+                        <select id="email-template-type" class="custom-select">
+                            <option value="partner">By Partner (Aggregated)</option>
+                            <option value="advertiser">By Advertiser</option>
+                            <option value="campaign">Single Campaign</option>
+                        </select>
+                        <small class="hint-text">Choose how to group the opportunities.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Template Style</label>
+                        <select id="email-style" class="custom-select">
+                            <option value="standard">Standard (Detailed)</option>
+                            <option value="executive">Executive Summary (High Level)</option>
+                            <option value="action">Quick Action (Urgent)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label id="email-target-label">Select Partner</label>
+                        <select id="email-target-select" class="custom-select">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+
+                    <button id="btn-generate-email" class="btn primary full-width">
+                        Generate Draft
+                    </button>
+                </div>
+
+                <div class="email-preview-pane">
+                    <div class="preview-header">
+                        <label>Preview</label>
+                        <button id="btn-copy-email" class="btn small"><i data-lucide="copy"></i> Copy</button>
+                    </div>
+                    <textarea id="email-output" readonly
+                        placeholder="Generated email content will appear here..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pacing Email Builder View (New) -->
+        <div id="view-email-pacing" class="view-panel hidden">
+            <div class="panel-header glass-panel">
+                <h3>Pacing Alert Builder</h3>
+                <div style="flex-grow:1"></div>
+                <button id="btn-back-data-pacing" class="btn text-btn">
+                    <i data-lucide="arrow-left"></i> Back to Data
+                </button>
+            </div>
+
+            <div class="glass-panel email-layout">
+                <!-- Config -->
+                <div class="email-config">
+                    <div class="filter-group">
+                        <label>Aggregation Level</label>
+                        <select id="pacing-email-template-type" class="custom-select">
+                            <option value="partner">By Partner</option>
+                            <option value="advertiser">By Advertiser</option>
+                            <option value="campaign">By Campaign</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label id="pacing-email-target-label">Select Partner</label>
+                        <select id="pacing-email-target-select" class="custom-select">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Style</label>
+                        <select id="pacing-email-style" class="custom-select">
+                            <option value="standard">Standard (Detailed)</option>
+                            <option value="urgent">Urgent Action</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-top:1rem;">
+                        <button id="btn-generate-pacing-email" class="btn primary full-width">Generate
+                            Alert</button>
+                    </div>
+                </div>
+
+                <!-- Preview -->
+                <div class="email-preview-pane">
+                    <div class="preview-header">
+                        <h4>Preview</h4>
+                        <button id="btn-copy-pacing-email" class="btn secondary"
+                            style="font-size:0.85rem; padding:0.5rem 1rem;">
+                            <i data-lucide="copy"></i> Copy
+                        </button>
+                    </div>
+                    <textarea id="pacing-email-output" readonly
+                        placeholder="Select specific target and click generate..."></textarea>
+                    <span class="hint-text">Edit functionality disabled. Copy to your email client to
+                        customize.</span>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
     </main>
     </div>

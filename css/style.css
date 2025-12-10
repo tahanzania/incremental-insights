@@ -563,7 +563,8 @@ tbody tr:hover {
     margin-bottom: 1rem;
 }
 
-#email-output {
+#email-output,
+#pacing-email-output {
     flex: 1;
     width: 100%;
     background: #ffffff;

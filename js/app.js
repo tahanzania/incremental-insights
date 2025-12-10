@@ -39,7 +39,11 @@ const FIELD_MAPPING_CONFIG = {
     daysRemaining: ['Flight Days Remaining', 'Days Remaining', 'Remaining Days'],
     pacing: ['Pacing', 'Pacing Percentage', 'Campaign Pacing'],
 
+    pacing: ['Pacing', 'Pacing Percentage', 'Campaign Pacing'],
+
     // New Fields
+    campaignId: ['CampaignId', 'Campaign ID', 'ID'],
+    audienceType: ['Audience Predictor/Excluder', 'Audience Predictor', 'Predictor/Excluder', 'Audience'],
     beatingGoal: ['Beating KPI Goal'],
     kpiType: ['Goal Type', 'KPI Type'],
     goalValue: ['Goal Value'],
@@ -62,7 +66,9 @@ const UI = {
     filterPacing: document.getElementById('filter-pacing'), // New
     pacingVal: document.getElementById('pacing-val'), // New
     filterKpiContainer: document.getElementById('filter-kpi-container'), // Checklist container
+    filterAudienceContainer: document.getElementById('filter-audience-container'), // New Audience Checklist
     filterBeatingKpi: document.getElementById('filter-beating-kpi'),
+    filterUnderPacing: document.getElementById('filter-under-pacing'), // New Toggle
 
     // Help View
     btnHelp: document.getElementById('btn-help'),
@@ -83,8 +89,10 @@ const UI = {
     // Views
     viewData: document.getElementById('view-data'),
     viewEmail: document.getElementById('view-email'),
+    viewEmailPacing: document.getElementById('view-email-pacing'), // New
     btnViewData: document.getElementById('btn-view-data'),
     btnViewEmail: document.getElementById('btn-email-view'),
+    btnViewPacingEmail: document.getElementById('btn-pacing-email-view'), // New
     viewLevelSelect: document.getElementById('view-level-select'), // New aggregation switch
 
     // Actions
@@ -98,7 +106,17 @@ const UI = {
     emailTargetLabel: document.getElementById('email-target-label'),
     btnGenerateEmail: document.getElementById('btn-generate-email'),
     emailOutput: document.getElementById('email-output'),
-    btnCopyEmail: document.getElementById('btn-copy-email')
+    btnCopyEmail: document.getElementById('btn-copy-email'),
+
+    // Pacing Email
+    pacingEmailTemplateType: document.getElementById('pacing-email-template-type'),
+    pacingEmailTargetSelect: document.getElementById('pacing-email-target-select'),
+    pacingEmailTargetLabel: document.getElementById('pacing-email-target-label'),
+    pacingEmailStyle: document.getElementById('pacing-email-style'),
+    btnGeneratePacingEmail: document.getElementById('btn-generate-pacing-email'),
+    pacingEmailOutput: document.getElementById('pacing-email-output'),
+    btnCopyPacingEmail: document.getElementById('btn-copy-pacing-email'),
+    btnBackDataPacing: document.getElementById('btn-back-data-pacing')
 };
 
 // --- Initialization ---
@@ -108,7 +126,10 @@ function init() {
     setupFilterListeners();
     setupNavigation();
     setupViewControls(); // New Listener
+    setupNavigation();
+    setupViewControls();
     setupEmailBuilder();
+    setupPacingEmailBuilder(); // New
     setupHelpListeners(); // New listener logic
 }
 
@@ -284,7 +305,34 @@ function normalizeData(json) {
         // Default 'calculatedOpportunity'
         normalized.calculatedOpportunity = 0;
 
+        // Default 'calculatedOpportunity'
+        normalized.calculatedOpportunity = 0;
+
         return normalized;
+    });
+
+    // --- DUPLICATE DETECTION ---
+    const seenIds = new Set();
+    const duplicates = new Set();
+
+    // First pass to identify duplicates
+    AppState.rawData.forEach(item => {
+        const id = item.campaignId;
+        if (id) {
+            if (seenIds.has(id)) {
+                duplicates.add(id);
+            }
+            seenIds.add(id);
+        }
+    });
+
+    // Second pass to mark them
+    AppState.rawData.forEach(item => {
+        if (item.campaignId && duplicates.has(item.campaignId)) {
+            item.isDuplicate = true;
+        } else {
+            item.isDuplicate = false;
+        }
     });
 
     AppState.processedData = [...AppState.rawData];
@@ -350,6 +398,37 @@ function populateFilters(data) {
             UI.filterKpiContainer.appendChild(label);
         });
     }
+
+    // Audience Types - Checkbox List
+    if (UI.filterAudienceContainer) {
+        UI.filterAudienceContainer.innerHTML = '';
+        const audienceTypes = [...new Set(data.map(d => d.audienceType).filter(Boolean))].sort();
+
+        if (audienceTypes.length === 0) {
+            UI.filterAudienceContainer.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">No Audience data found</span>';
+        } else {
+            audienceTypes.forEach(type => {
+                const label = document.createElement('label');
+                label.style.display = 'flex';
+                label.style.alignItems = 'center';
+                label.style.gap = '0.5rem';
+                label.style.fontSize = '0.9rem';
+                label.style.color = 'var(--text-main)';
+                label.style.cursor = 'pointer';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = type;
+                checkbox.classList.add('audience-checkbox');
+                checkbox.checked = true; // Default all checked
+
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(type));
+
+                UI.filterAudienceContainer.appendChild(label);
+            });
+        }
+    }
 }
 
 function fillSelect(select, values) {
@@ -374,9 +453,16 @@ function setupFilterListeners() {
     });
 
     // Delegate changes from checklist
+    // Delegate changes from checklist
     if (UI.filterKpiContainer) {
         UI.filterKpiContainer.addEventListener('change', applyFilters);
     }
+
+    if (UI.filterAudienceContainer) {
+        UI.filterAudienceContainer.addEventListener('change', applyFilters);
+    }
+
+    if (UI.filterUnderPacing) UI.filterUnderPacing.addEventListener('change', applyFilters); // Listener for new toggle
 
     // Slider listener
     if (UI.filterScore) {
@@ -485,10 +571,17 @@ function applyFilters() {
     const fCampaign = UI.filterCampaign.value;
 
     // Get all checked boxes
-    const checkedBoxes = UI.filterKpiContainer.querySelectorAll('.kpi-checkbox:checked');
-    const selectedKpiTypes = Array.from(checkedBoxes).map(cb => cb.value);
+    // Get all checked boxes
+    const checkedKpiBoxes = UI.filterKpiContainer.querySelectorAll('.kpi-checkbox:checked');
+    const selectedKpiTypes = Array.from(checkedKpiBoxes).map(cb => cb.value);
+
+    const checkedAudBoxes = UI.filterAudienceContainer ? UI.filterAudienceContainer.querySelectorAll('.audience-checkbox:checked') : [];
+    const selectedAudienceTypes = Array.from(checkedAudBoxes).map(cb => cb.value);
+    // If no audience types found in data, ignore filter (allow all)
+    const hasAudienceData = UI.filterAudienceContainer && UI.filterAudienceContainer.querySelectorAll('.audience-checkbox').length > 0;
 
     const fBeatingKpi = UI.filterBeatingKpi.checked;
+    const fUnderPacing = UI.filterUnderPacing ? UI.filterUnderPacing.checked : false;
 
     AppState.processedData = AppState.rawData.filter(item => {
         if (fPartner !== 'all' && item.partner !== fPartner) return false;
@@ -498,7 +591,23 @@ function applyFilters() {
         // Multi-select KPI check
         if (!selectedKpiTypes.includes(item.kpiType)) return false;
 
+        // Audience Check
+        if (hasAudienceData) {
+            // If item has an audience type, it MUST be in selected. 
+            // If item has NO audience type, what do we do? Usually generic rows keep showing?
+            // Let's assume if data exists, we filter strictly.
+            if (item.audienceType && !selectedAudienceTypes.includes(item.audienceType)) return false;
+            // If we want to filter OUT empty ones if unselected?
+            // Actually, if user unchecks everything, they see nothing.
+        }
+
         if (fBeatingKpi && !item.beatingGoalBool) return false;
+
+        // Under Pacing Filter
+        if (fUnderPacing) {
+            let p = parseFloat(item.pacing);
+            if (isNaN(p) || p >= 99) return false;
+        }
 
         return true;
     });
@@ -696,10 +805,14 @@ function renderTable(data) {
             const formattedKpi = formatKpi(item.avgKpiValue, item.kpiType);
             const formattedGoal = formatKpi(item.goalValue, item.kpiType);
 
+            const duplicateBadge = item.isDuplicate ?
+                `<span class="badge" style="background:var(--danger); color:white; font-size:0.7rem; margin-left:0.5rem;" title="Duplicate Campaign ID">Duplicate</span>`
+                : '';
+
             return `<tr>
                 <td>${item.partner || '-'}</td>
                 <td>${item.advertiser || '-'}</td>
-                <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">${item.campaign || '-'}</div></td>
+                <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">${item.campaign || '-'}${duplicateBadge}</div></td>
                 <td>${item.kpiType || item.decisioned || '-'}</td>
                 <td>${formattedKpi}</td>
                 <td>${formattedGoal}</td>
@@ -926,27 +1039,42 @@ function formatPercent(val) {
 function setupNavigation() {
     UI.btnViewData.addEventListener('click', () => switchView('data'));
     UI.btnViewEmail.addEventListener('click', () => switchView('email'));
+    UI.btnViewPacingEmail.addEventListener('click', () => switchView('email-pacing'));
+
     document.getElementById('btn-back-data')?.addEventListener('click', () => switchView('data'));
+    UI.btnBackDataPacing?.addEventListener('click', () => switchView('data'));
 }
 
 function switchView(view) {
+    // Hide all first
+    UI.viewData.classList.add('hidden');
+    UI.viewData.classList.remove('active');
+    UI.viewEmail.classList.add('hidden');
+    UI.viewEmail.classList.remove('active');
+    if (UI.viewEmailPacing) {
+        UI.viewEmailPacing.classList.add('hidden');
+        UI.viewEmailPacing.classList.remove('active');
+    }
+
+    // buttons
+    UI.btnViewData.classList.remove('active');
+    UI.btnViewEmail.classList.remove('active');
+    UI.btnViewPacingEmail.classList.remove('active');
+
     if (view === 'data') {
         UI.viewData.classList.remove('hidden');
         UI.viewData.classList.add('active');
-        UI.viewEmail.classList.add('hidden');
-        UI.viewEmail.classList.remove('active');
         UI.btnViewData.classList.add('active');
-        UI.btnViewEmail.classList.remove('active');
-    } else {
-        UI.viewData.classList.add('hidden');
-        UI.viewData.classList.remove('active');
+    } else if (view === 'email') {
         UI.viewEmail.classList.remove('hidden');
         UI.viewEmail.classList.add('active');
-        UI.btnViewData.classList.remove('active');
         UI.btnViewEmail.classList.add('active');
-
-        // Update targets on switch
         updateEmailTargets();
+    } else if (view === 'email-pacing') {
+        UI.viewEmailPacing.classList.remove('hidden');
+        UI.viewEmailPacing.classList.add('active');
+        UI.btnViewPacingEmail.classList.add('active');
+        updatePacingEmailTargets();
     }
 }
 
@@ -954,6 +1082,13 @@ function setupEmailBuilder() {
     UI.emailTemplateType.addEventListener('change', updateEmailTargets);
     UI.btnGenerateEmail.addEventListener('click', generateEmail);
     UI.btnCopyEmail.addEventListener('click', copyEmail);
+}
+
+function setupPacingEmailBuilder() {
+    if (!UI.pacingEmailTemplateType) return;
+    UI.pacingEmailTemplateType.addEventListener('change', updatePacingEmailTargets);
+    UI.btnGeneratePacingEmail.addEventListener('click', generatePacingEmail);
+    UI.btnCopyPacingEmail.addEventListener('click', copyPacingEmail);
 }
 
 function setupHelpListeners() {
@@ -1104,6 +1239,97 @@ function copyEmail() {
     setTimeout(() => UI.btnCopyEmail.innerHTML = original, 2000);
 }
 
+// --- PACING EMAIL LOGIC ---
+
+function updatePacingEmailTargets() {
+    const type = UI.pacingEmailTemplateType.value;
+    let options = [];
+    const data = AppState.processedData;
+
+    if (type === 'partner') {
+        UI.pacingEmailTargetLabel.textContent = "Select Partner";
+        options = [...new Set(data.map(d => d.partner).filter(Boolean))].sort();
+    } else if (type === 'advertiser') {
+        UI.pacingEmailTargetLabel.textContent = "Select Advertiser";
+        options = [...new Set(data.map(d => d.advertiser).filter(Boolean))].sort();
+    } else {
+        UI.pacingEmailTargetLabel.textContent = "Select Campaign";
+        options = data.map(d => d.campaign).filter(Boolean).sort();
+    }
+    fillSelect(UI.pacingEmailTargetSelect, options);
+}
+
+function generatePacingEmail() {
+    const type = UI.pacingEmailTemplateType.value;
+    const target = UI.pacingEmailTargetSelect.value;
+    const style = UI.pacingEmailStyle.value;
+
+    if (!target) {
+        UI.pacingEmailOutput.value = "Please select a target first.";
+        return;
+    }
+
+    let scopeData = AppState.processedData;
+    if (type === 'partner') scopeData = scopeData.filter(d => d.partner === target);
+    if (type === 'advertiser') scopeData = scopeData.filter(d => d.advertiser === target);
+    if (type === 'campaign') scopeData = scopeData.filter(d => d.campaign === target);
+
+    // Filter for UNDER pacing (< 99%)
+    const underPacing = scopeData.filter(d => {
+        // Safe parse
+        let p = parseFloat(d.pacing);
+        if (isNaN(p)) return false;
+        return p < 99; // Strict under 99 check
+    });
+
+    if (underPacing.length === 0) {
+        UI.pacingEmailOutput.value = `No campaigns found pacing under 99% for '${target}'.`;
+        return;
+    }
+
+    let subject = "";
+    let body = "";
+
+    if (style === 'urgent') {
+        subject = `URGENT: Low Pacing Alert - ${target}`;
+        body = `Hi Team,\n\nThe following campaigns for ${target} are currently pacing below 99% and are at risk of under-delivery.\n\n`;
+        body += `Please review and optimize immediately.\n\n`;
+
+        underPacing.forEach(d => {
+            body += `• ${d.campaign}\n`;
+            body += `  - Current Pacing: ${formatPercent(d.pacing)}\n`;
+            body += `  - Days Remaining: ${d.daysRemaining}\n\n`;
+        });
+
+    } else {
+        // Standard
+        subject = `Pacing Update: ${target}`;
+        body = `Hi Team,\n\nHere is the pacing report for ${target}. We have flagged ${underPacing.length} campaigns that are currently pacing below 99%.\n\n`;
+
+        underPacing.forEach(d => {
+            let pacingVal = Math.round(d.pacing);
+            if (pacingVal > 100) pacingVal = 100;
+
+            body += `Campaign: ${d.campaign} (${d.advertiser})\n`;
+            body += `  - Pacing: ${pacingVal}%\n`;
+            body += `  - Days Remaining: ${d.daysRemaining}\n`;
+            body += `  - Budget Remaining: ${formatCurrency(d.incrementalBudget * d.daysRemaining)} (Est.)\n\n`;
+        });
+    }
+
+    body += `\nPlease let us know if there are any blockers.\n\nBest,\n[Your Name]`;
+    UI.pacingEmailOutput.value = `Subject: ${subject}\n\n${body}`;
+}
+
+function copyPacingEmail() {
+    UI.pacingEmailOutput.select();
+    document.execCommand('copy');
+    const original = UI.btnCopyPacingEmail.innerHTML;
+    UI.btnCopyPacingEmail.innerHTML = `<i data-lucide="check"></i> Copied`;
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => UI.btnCopyPacingEmail.innerHTML = original, 2000);
+}
+
 
 function formatRatio(val) {
     if (val === undefined || val === null || isNaN(val)) return '-';
@@ -1122,7 +1348,7 @@ function formatKpi(val, type) {
     const t = type.toLowerCase();
 
     // Currency Types
-    if (t.includes('cpa') || t.includes('revenue') || t.includes('cost')) {
+    if (t.includes('cpa') || t.includes('revenue') || t.includes('cost') || t.includes('cpcv')) {
         return formatCurrency(val);
     }
 
