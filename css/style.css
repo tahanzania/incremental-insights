@@ -1,8 +1,8 @@
 :root {
     --bg-color-1: #f8fafc;
     --bg-color-2: #f1f5f9;
-    --primary: #7c3aed;
-    --primary-hover: #6d28d9;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
     --secondary: #e2e8f0;
     --secondary-hover: #cbd5e1;
     --text-main: #0f172a;
@@ -47,8 +47,8 @@ h4 {
     height: 100vh;
     z-index: -1;
     background:
-        radial-gradient(circle at 10% 20%, rgba(124, 58, 237, 0.05) 0%, transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
         var(--bg-color-1);
 }
 
@@ -81,7 +81,7 @@ h4 {
 .btn.primary {
     background: var(--primary);
     color: white;
-    box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.3);
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
 }
 
 .btn.primary:hover {
@@ -153,7 +153,7 @@ header {
     width: 40px;
     height: 40px;
     border-radius: 10px;
-    background: linear-gradient(135deg, var(--primary), #4f46e5);
+    background: linear-gradient(135deg, var(--primary), #1e40af);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -228,13 +228,13 @@ header {
 .file-drop-area:hover,
 .file-drop-area.drag-over {
     border-color: var(--primary);
-    background: rgba(139, 92, 246, 0.05);
+    background: rgba(37, 99, 235, 0.05);
 }
 
 .upload-icon-wrapper {
     width: 64px;
     height: 64px;
-    background: rgba(124, 58, 237, 0.1);
+    background: rgba(37, 99, 235, 0.1);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -278,17 +278,20 @@ header {
     gap: 0.75rem;
     color: var(--text-muted);
     font-size: 0.9rem;
-    background: rgba(124, 58, 237, 0.05);
+    background: rgba(37, 99, 235, 0.05);
     /* Light primary bg */
     padding: 0.75rem;
     border-radius: 0.5rem;
-    border: 1px solid rgba(124, 58, 237, 0.1);
+    border: 1px solid rgba(37, 99, 235, 0.1);
 }
 
 /* Dashboard Layout */
 #dashboard-section {
     display: flex;
-    flex: 1;
+    flex-direction: row;
+    /* Ensure side-by-side */
+    height: calc(100vh - 80px);
+    /* Adjust based on navbar/header height */
     overflow: hidden;
 }
 
@@ -438,7 +441,7 @@ input:checked+.slider:before {
     width: 50px;
     height: 50px;
     border-radius: 12px;
-    background: rgba(124, 58, 237, 0.1);
+    background: rgba(37, 99, 235, 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -530,7 +533,7 @@ td {
 }
 
 tbody tr:hover {
-    background: rgba(124, 58, 237, 0.03);
+    background: rgba(37, 99, 235, 0.03);
 }
 
 /* Email Builder */

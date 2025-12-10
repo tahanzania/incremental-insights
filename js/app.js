@@ -47,7 +47,8 @@ const FIELD_MAPPING_CONFIG = {
     beatingGoal: ['Beating KPI Goal'],
     kpiType: ['Goal Type', 'KPI Type'],
     goalValue: ['Goal Value'],
-    avgKpiValue: ['Average KPI Value']
+    avgKpiValue: ['Average KPI Value'],
+    offGoal: ['Off Goal %', 'Off Goal', 'Variance']
 };
 
 // --- DOM References ---
@@ -255,6 +256,20 @@ function normalizeData(json) {
                     // Ensure decimals are handled if needed, but 100 is max.
                 } else if (['score', 'incrementalBudget', 'daysRemaining', 'avgKpiValue', 'goalValue'].includes(key)) {
                     val = parseFloat(cleanedStr) || 0;
+                } else if (key === 'offGoal') {
+                    // " -5% " -> -0.05 or -5?
+                    // Usually string "5%" -> 0.05?
+                    // Let's keep it as raw string or clean number?
+                    // If it has %, parseFloat removes it.
+                    // If CSV says "-5%", parseFloat("-5") -> -5.
+                    // If CSV says "0.05", parseFloat -> 0.05.
+                    // Let's assume standard Percentage rules.
+                    if (String(val).includes('%')) {
+                        val = parseFloat(cleanedStr.replace('%', '')); // -5 from "-5%"
+                        val = val / 100; // -0.05
+                    } else {
+                        val = parseFloat(cleanedStr);
+                    }
                 } else {
                     val = String(val).trim(); // Text fields
                 }
@@ -761,16 +776,16 @@ function renderTable(data) {
     if (viewLevel === 'campaign') {
         // Detailed View
         keys = ['partner', 'advertiser', 'campaign', 'kpiType', 'avgKpiValue', 'goalValue', 'kpiPerfRatio', 'score', 'daysRemaining', 'pacing', 'incrementalBudget', 'calculatedOpportunity'];
-        headers = ['Partner', 'Advertiser', 'Campaign', 'Goal Type', 'Avg. KPI', 'Goal', 'KPI Perf.', 'Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
+        headers = ['Partner', 'Advertiser', 'Campaign', 'Goal Type', 'Avg. KPI', 'Goal', 'KPI Perf.', 'Decision Power Score', 'Days', 'Pacing', 'Inc. Budget', 'Total Inc. Opp.'];
     } else {
         // Summary Views
         if (viewLevel === 'advertiser') {
             keys = ['name', 'partner', 'count', 'avgScore', 'incrementalBudget', 'calculatedOpportunity'];
-            headers = ['Advertiser', 'Partner', 'Campaigns', 'Avg. Score', 'Total Inc. Budget', 'Total Inc. Opp.'];
+            headers = ['Advertiser', 'Partner', 'Campaigns', 'Avg. Decision Power Score', 'Total Inc. Budget', 'Total Inc. Opp.'];
         } else {
             // Partner
             keys = ['name', 'count', 'avgScore', 'incrementalBudget', 'calculatedOpportunity'];
-            headers = ['Partner', 'Campaigns', 'Avg. Score', 'Total Inc. Budget', 'Total Inc. Opp.'];
+            headers = ['Partner', 'Campaigns', 'Avg. Decision Power Score', 'Total Inc. Budget', 'Total Inc. Opp.'];
         }
     }
 
@@ -800,7 +815,16 @@ function renderTable(data) {
     UI.tableBody.innerHTML = subset.map(item => {
         if (viewLevel === 'campaign') {
             // ... existing campaign row logic ...
-            const perf = item.kpiPerfRatio ? formatRatio(item.kpiPerfRatio) : '-';
+            // Use offGoal if available, else calc ratio (fallback)
+            let perfDisplay = '-';
+            if (item.offGoal !== undefined && !isNaN(item.offGoal)) {
+                perfDisplay = formatPercent(item.offGoal * 100, true); // true for keeping sign? formatPercent caps at 100? No, formatPercent caps logic is for PACING.
+                // We need a generic percent formatter.
+                perfDisplay = (Math.round(item.offGoal * 10000) / 100) + '%';
+            } else {
+                perfDisplay = item.kpiPerfRatio ? formatRatio(item.kpiPerfRatio) : '-';
+            }
+
             const color = item.beatingGoalBool ? 'var(--success)' : '#ef4444';
             const formattedKpi = formatKpi(item.avgKpiValue, item.kpiType);
             const formattedGoal = formatKpi(item.goalValue, item.kpiType);
@@ -816,7 +840,7 @@ function renderTable(data) {
                 <td>${item.kpiType || item.decisioned || '-'}</td>
                 <td>${formattedKpi}</td>
                 <td>${formattedGoal}</td>
-                <td style="color:${color}; font-weight:500;">${perf}</td>
+                <td style="color:${color}; font-weight:500;">${perfDisplay}</td>
                 <td>${item.score || 0}</td>
                 <td>${item.daysRemaining || 0}</td>
                 <td>${formatPercent(item.pacing)}</td>
@@ -924,7 +948,7 @@ function renderPivotView(data) {
     // Headers
     const headers = [
         { key: 'partner', label: 'Hierarchy' },
-        { key: 'score', label: 'Avg Score' },
+        { key: 'score', label: 'Decision Power Score' },
         { key: 'incrementalBudget', label: 'Inc. Budget' },
         { key: 'calculatedOpportunity', label: 'Inc. Opportunity' }
     ];
@@ -961,7 +985,7 @@ function renderPivotView(data) {
                     ${p.name} <span class="badge" style="font-size:0.75rem;">${p.metrics.count}</span>
                 </div>
             </td>
-            <td>${pScore}</td>
+            <td>-</td>
             <td>${pBud}</td>
             <td style="font-weight:600; color:var(--success);">${pOpp}</td>
         </tr>`;
@@ -979,7 +1003,7 @@ function renderPivotView(data) {
                         ${a.name} <span class="badge" style="font-size:0.75rem; background:rgba(0,0,0,0.05);">${a.metrics.count}</span>
                     </div>
                 </td>
-                <td>${aScore}</td>
+                <td>-</td>
                 <td>${aBud}</td>
                 <td style="font-weight:600; color:var(--success);">${aOpp}</td>
             </tr>`;
