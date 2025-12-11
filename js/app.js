@@ -48,7 +48,10 @@ const FIELD_MAPPING_CONFIG = {
     kpiType: ['Goal Type', 'KPI Type'],
     goalValue: ['Goal Value'],
     avgKpiValue: ['Average KPI Value'],
-    offGoal: ['Off Goal %', 'Off Goal', 'Variance']
+    goalValue: ['Goal Value'],
+    avgKpiValue: ['Average KPI Value'],
+    offGoal: ['Off Goal %', 'Off Goal', 'Variance'],
+    spendRisk: ['Daily Spend Risk', 'Daily Spend Risk (-) or Incremental (+) - Advertiser Cost In Advertiser Currency']
 };
 
 // --- DOM References ---
@@ -69,6 +72,11 @@ const UI = {
     filterKpiContainer: document.getElementById('filter-kpi-container'), // Checklist container
     filterAudienceContainer: document.getElementById('filter-audience-container'), // New Audience Checklist
     filterBeatingKpi: document.getElementById('filter-beating-kpi'),
+    filterKpiBuffer: document.getElementById('filter-kpi-buffer'),
+    bufferVal: document.getElementById('buffer-val'),
+    filterIncBuffer: document.getElementById('filter-inc-buffer'),
+    incBufferVal: document.getElementById('inc-buffer-val'),
+    filterDuplicate: document.getElementById('filter-duplicate'),
     filterUnderPacing: document.getElementById('filter-under-pacing'), // New Toggle
 
     // Help View
@@ -79,7 +87,11 @@ const UI = {
     // Stats
     statTotal: document.getElementById('stat-total-campaigns'),
     statQualifying: document.getElementById('stat-qualifying'),
+    statTotal: document.getElementById('stat-total-campaigns'),
+    statQualifying: document.getElementById('stat-qualifying'),
     statOpportunity: document.getElementById('stat-opportunity'),
+    statUnderPacing: document.getElementById('stat-under-pacing-count'),
+    statSpendRisk: document.getElementById('stat-spend-risk'),
 
     // Table
     tableTitle: document.getElementById('table-title'),
@@ -105,6 +117,8 @@ const UI = {
     emailStyle: document.getElementById('email-style'),
     emailTargetSelect: document.getElementById('email-target-select'),
     emailTargetLabel: document.getElementById('email-target-label'),
+    emailStyle: document.getElementById('email-style'),
+    emailDuplicateFilter: document.getElementById('email-duplicate-filter'),
     btnGenerateEmail: document.getElementById('btn-generate-email'),
     emailOutput: document.getElementById('email-output'),
     btnCopyEmail: document.getElementById('btn-copy-email'),
@@ -113,6 +127,8 @@ const UI = {
     pacingEmailTemplateType: document.getElementById('pacing-email-template-type'),
     pacingEmailTargetSelect: document.getElementById('pacing-email-target-select'),
     pacingEmailTargetLabel: document.getElementById('pacing-email-target-label'),
+    pacingEmailTargetLabel: document.getElementById('pacing-email-target-label'),
+    pacingEmailDuplicateFilter: document.getElementById('pacing-email-duplicate-filter'),
     pacingEmailStyle: document.getElementById('pacing-email-style'),
     btnGeneratePacingEmail: document.getElementById('btn-generate-pacing-email'),
     pacingEmailOutput: document.getElementById('pacing-email-output'),
@@ -254,12 +270,11 @@ function normalizeData(json) {
                     // Cap at 100%
                     if (val > 100) val = 100;
                     // Ensure decimals are handled if needed, but 100 is max.
-                } else if (['score', 'incrementalBudget', 'daysRemaining', 'avgKpiValue', 'goalValue'].includes(key)) {
+                } else if (['score', 'incrementalBudget', 'daysRemaining', 'avgKpiValue', 'goalValue', 'spendRisk'].includes(key)) {
                     val = parseFloat(cleanedStr) || 0;
                 } else if (key === 'offGoal') {
                     // " -5% " -> -0.05 or -5?
                     // Usually string "5%" -> 0.05?
-                    // Let's keep it as raw string or clean number?
                     // If it has %, parseFloat removes it.
                     // If CSV says "-5%", parseFloat("-5") -> -5.
                     // If CSV says "0.05", parseFloat -> 0.05.
@@ -462,13 +477,13 @@ function fillSelect(select, values) {
 }
 
 function setupFilterListeners() {
-    const inputs = [UI.filterPartner, UI.filterAdvertiser, UI.filterCampaign, UI.filterBeatingKpi];
-    inputs.forEach(input => {
-        input.addEventListener('change', applyFilters);
-    });
+    // Delegate changes from checklist
+    UI.filterPartner.addEventListener('change', applyFilters);
+    UI.filterAdvertiser.addEventListener('change', applyFilters);
+    UI.filterCampaign.addEventListener('change', applyFilters);
+    UI.filterBeatingKpi.addEventListener('change', applyFilters);
+    if (UI.filterDuplicate) UI.filterDuplicate.addEventListener('change', applyFilters);
 
-    // Delegate changes from checklist
-    // Delegate changes from checklist
     if (UI.filterKpiContainer) {
         UI.filterKpiContainer.addEventListener('change', applyFilters);
     }
@@ -478,6 +493,25 @@ function setupFilterListeners() {
     }
 
     if (UI.filterUnderPacing) UI.filterUnderPacing.addEventListener('change', applyFilters); // Listener for new toggle
+
+    // KPI Buffer
+    if (UI.filterKpiBuffer) {
+        UI.filterKpiBuffer.addEventListener('input', (e) => {
+            UI.bufferVal.textContent = e.target.value + '%';
+            applyFilters();
+        });
+    }
+
+    // Inc Opp Buffer
+    if (UI.filterIncBuffer) {
+        UI.filterIncBuffer.addEventListener('input', (e) => {
+            const val = e.target.value;
+            // Add + sign if positive
+            const sign = val > 0 ? '+' : '';
+            UI.incBufferVal.textContent = `${sign}${val}%`;
+            applyFilters();
+        });
+    }
 
     // Slider listener
     if (UI.filterScore) {
@@ -616,7 +650,43 @@ function applyFilters() {
             // Actually, if user unchecks everything, they see nothing.
         }
 
-        if (fBeatingKpi && !item.beatingGoalBool) return false;
+        if (fBeatingKpi && !item.beatingGoalBool) {
+            // Check KPI Buffer
+            // Slider value -20 to 0.
+            const bufferPercent = UI.filterKpiBuffer ? parseInt(UI.filterKpiBuffer.value) : 0;
+            const bufferDecimal = bufferPercent / 100; // e.g., -0.20
+
+            // Determine variance (off goal)
+            let variance = 0;
+            if (item.offGoal !== undefined && !isNaN(item.offGoal)) {
+                variance = item.offGoal;
+            } else {
+                // Calculate variance if not present
+                // "Off Goal" typically means (Actual - Goal) / Goal for High-Better
+                // Or (Goal - Actual) / Goal for Low-Better?
+                // Let's standard: Deviation from goal. 
+                // We use kpiPerfRatio.
+                // High Better: Ratio 0.9 -> -10%. (0.9 - 1) = -0.1.
+                // Low Better: Ratio 1.1 -> -10%. (1 - 1.1) = -0.1.
+                const type = String(item.kpiType || '').toLowerCase();
+                const ratio = item.kpiPerfRatio || 0;
+
+                if (type.includes('cpa') || type.includes('cost')) {
+                    // Lower is better. If Ratio > 1 (e.g. 1.1), it is BAD (negative deviation).
+                    variance = 1 - ratio;
+                } else {
+                    // Higher is better. If Ratio < 1 (e.g. 0.9), it is BAD (negative deviation).
+                    variance = ratio - 1;
+                }
+            }
+
+            // If actual variance (e.g. -0.05) is GREATER or EQUAL to buffer (e.g. -0.20), allow it.
+            // -0.05 >= -0.20 -> True.
+            // -0.30 >= -0.20 -> False.
+            if (variance < bufferDecimal) {
+                return false;
+            }
+        }
 
         // Under Pacing Filter
         if (fUnderPacing) {
@@ -635,42 +705,95 @@ function applyFilters() {
 function runCalculation() {
     let grandTotal = 0;
     let qualifyingCount = 0;
+    let underPacingCount = 0;
+    let totalSpendRisk = 0;
 
     // Get dynamic threshold
     const scoreThreshold = UI.filterScore ? parseInt(UI.filterScore.value) : 100;
     const pacingThreshold = UI.filterPacing ? parseInt(UI.filterPacing.value) : 99;
+    const incBufferPercent = UI.filterIncBuffer ? parseInt(UI.filterIncBuffer.value) : 0;
+    const incBufferMultiplier = 1 + (incBufferPercent / 100);
 
+    // 1. First Pass: Calculate values for ALL filtered items
     AppState.processedData.forEach(item => {
-        // Logic:
-        // Pacing > Threshold
-        // AND Power Score > Threshold
-
+        // --- Spend Risk Logic ---
+        // Just calculation, don't sum yet
+        // --- Opportunity Logic ---
         let isPacingHigh = false;
-        // Or "1" if formatted number.
-        // We look for "At or near 100" or exceeding 100
-
-        // Normalized to 0-100 scale.
         if (item.pacing >= pacingThreshold) isPacingHigh = true;
 
         const isScoreHigh = item.score > scoreThreshold;
 
         if (isPacingHigh && isScoreHigh) {
-            // Compute: Incremental Budget * Days Remaining
-            const opp = item.incrementalBudget * item.daysRemaining;
+            let opp = item.incrementalBudget * item.daysRemaining;
+            opp = opp * incBufferMultiplier;
             item.calculatedOpportunity = opp;
-            grandTotal += opp;
-            qualifyingCount++;
         } else {
             item.calculatedOpportunity = 0;
         }
     });
 
+    // 2. Deduplication Logic
+    let displayData = AppState.processedData;
+    const dupFilter = UI.filterDuplicate ? UI.filterDuplicate.value : 'none';
+
+    if (dupFilter !== 'none') {
+        const uniqueMap = new Map();
+        displayData.forEach(item => {
+            const key = item.campaign;
+            if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, item);
+            } else {
+                const existing = uniqueMap.get(key);
+                let replace = false;
+
+                if (dupFilter === 'max-opp') {
+                    // Highest Opportunity Wins
+                    if (item.calculatedOpportunity > existing.calculatedOpportunity) {
+                        replace = true;
+                    } else if (item.calculatedOpportunity === existing.calculatedOpportunity) {
+                        // Tie breaker: maybe spend risk? or budget?
+                        if ((item.incrementalBudget || 0) > (existing.incrementalBudget || 0)) replace = true;
+                    }
+                } else if (dupFilter === 'best-perf') {
+                    // Best KPI Performance Wins
+                    const type = String(item.kpiType || '').toLowerCase();
+                    const isCost = type.includes('cpa') || type.includes('cost');
+
+                    if (isCost) {
+                        // Lower Ratio is Better
+                        if (item.kpiPerfRatio < existing.kpiPerfRatio) replace = true;
+                    } else {
+                        // Higher Ratio is Better
+                        if (item.kpiPerfRatio > existing.kpiPerfRatio) replace = true;
+                    }
+                }
+                if (replace) uniqueMap.set(key, item);
+            }
+        });
+        displayData = Array.from(uniqueMap.values());
+    }
+
+    // 3. Second Pass: Aggregate Totals on Display Data
+    displayData.forEach(item => {
+        if (item.calculatedOpportunity > 0) {
+            grandTotal += item.calculatedOpportunity;
+            qualifyingCount++;
+        }
+        if (item.spendRisk && item.spendRisk < 0) {
+            totalSpendRisk += item.spendRisk;
+            underPacingCount++; // Count campaigns, effectively de-duped if filter is on
+        }
+    });
+
     AppState.meta.totalOpportunity = grandTotal;
     AppState.meta.qualifyingCount = qualifyingCount;
+    AppState.meta.underPacingCount = underPacingCount;
+    AppState.meta.totalSpendRisk = totalSpendRisk;
 
     // Refresh table and stats
-    renderTable(AppState.processedData);
-    updateStats(AppState.processedData);
+    renderTable(displayData);
+    updateStats(displayData);
 }
 
 
@@ -679,6 +802,10 @@ function updateStats(data) {
     UI.statTotal.textContent = data.length;
     UI.statQualifying.textContent = AppState.meta.qualifyingCount;
     UI.statOpportunity.textContent = formatCurrency(AppState.meta.totalOpportunity);
+
+    if (UI.statUnderPacing) UI.statUnderPacing.textContent = AppState.meta.underPacingCount;
+    if (UI.statSpendRisk) UI.statSpendRisk.textContent = formatCurrency(AppState.meta.totalSpendRisk);
+
     UI.recordCount.textContent = `${data.length} records`;
 }
 
@@ -836,7 +963,9 @@ function renderTable(data) {
             return `<tr>
                 <td>${item.partner || '-'}</td>
                 <td>${item.advertiser || '-'}</td>
-                <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">${item.campaign || '-'}${duplicateBadge}</div></td>
+                <td><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${item.campaign}">
+                    ${item.campaignId ? `<a href="https://desk.thetradedesk.com/app/home/campaign/${item.campaignId}/performance" target="_blank" style="color:inherit; text-decoration:none; border-bottom:1px dotted var(--text-muted);" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='inherit'">${item.campaign || '-'}</a>` : (item.campaign || '-')}
+                    ${duplicateBadge}</div></td>
                 <td>${item.kpiType || item.decisioned || '-'}</td>
                 <td>${formattedKpi}</td>
                 <td>${formattedGoal}</td>
@@ -1016,7 +1145,7 @@ function renderPivotView(data) {
 
                 htmlBody += `<tr class="pivot-row level-3 hidden" data-level="3" style="background:rgba(255,255,255,0.5);">
                     <td style="padding-left:5rem; font-size:0.9rem;">
-                        ${c.campaign}
+                        ${c.campaignId ? `<a href="https://desk.thetradedesk.com/app/home/campaign/${c.campaignId}/performance" target="_blank" style="color:inherit; text-decoration:none; border-bottom:1px dotted var(--text-muted);" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='inherit'">${c.campaign}</a>` : c.campaign}
                     </td>
                     <td>${c.score}</td>
                     <td>${cBud}</td>
@@ -1177,7 +1306,45 @@ function generateEmail() {
     if (type === 'campaign') scopeData = scopeData.filter(d => d.campaign === target);
 
     // Only include qualifying opportunities
-    const opportunities = scopeData.filter(d => d.calculatedOpportunity > 0);
+    let opportunities = scopeData.filter(d => d.calculatedOpportunity > 0);
+
+    // Filter Duplicates if requested
+    const dupFilter = UI.emailDuplicateFilter ? UI.emailDuplicateFilter.value : 'none';
+    if (dupFilter !== 'none') {
+        const uniqueMap = new Map();
+
+        opportunities.forEach(item => {
+            const key = item.campaign; // Group by name
+            if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, item);
+            } else {
+                const existing = uniqueMap.get(key);
+                let replace = false;
+
+                if (dupFilter === 'max-opp') {
+                    // Higher opportunity wins
+                    if (item.calculatedOpportunity > existing.calculatedOpportunity) replace = true;
+                } else if (dupFilter === 'best-perf') {
+                    // Check KPI Type
+                    const type = String(item.kpiType || '').toLowerCase();
+                    const isCost = type.includes('cpa') || type.includes('cost');
+
+                    // Ratio: Avg / Goal
+                    // Cost: Lower ratio is better.
+                    // Perf: Higher ratio is better.
+                    if (isCost) {
+                        if (item.kpiPerfRatio < existing.kpiPerfRatio) replace = true;
+                    } else {
+                        if (item.kpiPerfRatio > existing.kpiPerfRatio) replace = true;
+                    }
+                }
+
+                if (replace) uniqueMap.set(key, item);
+            }
+        });
+
+        opportunities = Array.from(uniqueMap.values());
+    }
 
     if (opportunities.length === 0) {
         const scoreThreshold = UI.filterScore ? UI.filterScore.value : 100;
@@ -1299,14 +1466,46 @@ function generatePacingEmail() {
     if (type === 'campaign') scopeData = scopeData.filter(d => d.campaign === target);
 
     // Filter for UNDER pacing (< 99%)
-    const underPacing = scopeData.filter(d => {
-        // Safe parse
-        let p = parseFloat(d.pacing);
-        if (isNaN(p)) return false;
-        return p < 99; // Strict under 99 check
+    let pacingData = scopeData.filter(d => {
+        const p = parseFloat(d.pacing);
+        return !isNaN(p) && p < 99;
     });
 
-    if (underPacing.length === 0) {
+    // Apply Duplicate Filter
+    const dupFilter = UI.pacingEmailDuplicateFilter ? UI.pacingEmailDuplicateFilter.value : 'none';
+    if (dupFilter !== 'none') {
+        const uniqueMap = new Map();
+        pacingData.forEach(item => {
+            const key = item.campaign;
+            if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, item);
+            } else {
+                const existing = uniqueMap.get(key);
+                let replace = false;
+
+                if (dupFilter === 'max-opp') {
+                    // For under-pacing, we use 'spendRisk' (magnitude) or 'incrementalBudget' as proxy for importance.
+                    // spendRisk is negative. So "Max Opp" = "Biggest Risk" = Lowest value (e.g. -500 vs -10).
+                    // Or just use budget size?
+                    // Let's use incrementalBudget as a safe "Potential" proxy.
+                    if ((item.incrementalBudget || 0) > (existing.incrementalBudget || 0)) replace = true;
+                } else if (dupFilter === 'best-perf') {
+                    // KPI Logic
+                    const type = String(item.kpiType || '').toLowerCase();
+                    const isCost = type.includes('cpa') || type.includes('cost');
+                    if (isCost) {
+                        if (item.kpiPerfRatio < existing.kpiPerfRatio) replace = true;
+                    } else {
+                        if (item.kpiPerfRatio > existing.kpiPerfRatio) replace = true;
+                    }
+                }
+                if (replace) uniqueMap.set(key, item);
+            }
+        });
+        pacingData = Array.from(uniqueMap.values());
+    }
+
+    if (pacingData.length === 0) {
         UI.pacingEmailOutput.value = `No campaigns found pacing under 99% for '${target}'.`;
         return;
     }
@@ -1319,7 +1518,7 @@ function generatePacingEmail() {
         body = `Hi Team,\n\nThe following campaigns for ${target} are currently pacing below 99% and are at risk of under-delivery.\n\n`;
         body += `Please review and optimize immediately.\n\n`;
 
-        underPacing.forEach(d => {
+        pacingData.forEach(d => {
             body += `• ${d.campaign}\n`;
             body += `  - Current Pacing: ${formatPercent(d.pacing)}\n`;
             body += `  - Days Remaining: ${d.daysRemaining}\n\n`;
@@ -1328,9 +1527,9 @@ function generatePacingEmail() {
     } else {
         // Standard
         subject = `Pacing Update: ${target}`;
-        body = `Hi Team,\n\nHere is the pacing report for ${target}. We have flagged ${underPacing.length} campaigns that are currently pacing below 99%.\n\n`;
+        body = `Hi Team,\n\nHere is the pacing report for ${target}. We have flagged ${pacingData.length} campaigns that are currently pacing below 99%.\n\n`;
 
-        underPacing.forEach(d => {
+        pacingData.forEach(d => {
             let pacingVal = Math.round(d.pacing);
             if (pacingVal > 100) pacingVal = 100;
 

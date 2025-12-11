@@ -208,6 +208,32 @@
                         </label>
                     </div>
 
+                    <div class="filter-group" id="filter-buffer-group">
+                        <div class="slider-header"
+                            style="display:flex; justify-content:space-between; margin-bottom:0.5rem; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">
+                            <label>KPI Buffer %</label>
+                            <span id="buffer-val" style="color:var(--primary); font-weight:600;">0%</span>
+                        </div>
+                        <input type="range" id="filter-kpi-buffer" min="-20" max="0" value="0" step="1"
+                            style="width:100%; cursor:pointer;">
+                        <span
+                            style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.25rem;">Allow
+                            campaigns off by up to X%</span>
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="slider-header"
+                            style="display:flex; justify-content:space-between; margin-bottom:0.5rem; color: #94a3b8; font-size: 0.9rem; font-weight: 500;">
+                            <label>Inc. Opp. Buffer %</label>
+                            <span id="inc-buffer-val" style="color:var(--primary); font-weight:600;">0%</span>
+                        </div>
+                        <input type="range" id="filter-inc-buffer" min="-100" max="100" value="0" step="1"
+                            style="width:100%; cursor:pointer;">
+                        <span
+                            style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:0.25rem;">Adjust
+                            Total Opportunity Amount</span>
+                    </div>
+
                     <div class="filter-group" id="filter-audience-group">
                         <label>Audience Predictor/Excluder</label>
                         <div id="filter-audience-container"
@@ -223,6 +249,15 @@
                             <!-- Checkboxes populated by JS -->
                         </div>
 
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Duplicate Handling</label>
+                        <select id="filter-duplicate" class="custom-select">
+                            <option value="none">Include All Duplicates</option>
+                            <option value="best-perf">Best Performing Only</option>
+                            <option value="max-opp">Highest Opportunity Only</option>
+                        </select>
                     </div>
 
                 </div>
@@ -265,6 +300,22 @@
                         <div class="stat-info">
                             <span class="label">Qualifying Opportunities</span>
                             <h2 id="stat-qualifying">0</h2>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel" style="border-left: 4px solid var(--danger);">
+                        <div class="stat-icon" style="color:var(--danger); background:rgba(239, 68, 68, 0.1);"><i
+                                data-lucide="alert-triangle"></i></div>
+                        <div class="stat-info">
+                            <span class="label">Under Pacing Campaigns</span>
+                            <h2 id="stat-under-pacing-count">0</h2>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel" style="border-left: 4px solid var(--danger);">
+                        <div class="stat-icon" style="color:var(--danger); background:rgba(239, 68, 68, 0.1);"><i
+                                data-lucide="trending-down"></i></div>
+                        <div class="stat-info">
+                            <span class="label">Total Daily Spend Risk</span>
+                            <h2 id="stat-spend-risk" style="color:var(--danger)">$0.00</h2>
                         </div>
                     </div>
                     <div class="stat-card glass-panel highlight-card">
@@ -327,6 +378,15 @@
                             </div>
 
                             <div class="form-group">
+                                <label>Duplicate Handling</label>
+                                <select id="email-duplicate-filter" class="custom-select">
+                                    <option value="none">Include All Duplicates</option>
+                                    <option value="best-perf">Best Performing Only</option>
+                                    <option value="max-opp">Highest Opportunity Only</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
                                 <label id="email-target-label">Select Partner</label>
                                 <select id="email-target-select" class="custom-select">
                                     <option value="">-- Select --</option>
@@ -372,6 +432,15 @@
                             </div>
 
                             <div class="filter-group">
+                                <label>Duplicate Handling</label>
+                                <select id="pacing-email-duplicate-filter" class="custom-select">
+                                    <option value="none">Include All Duplicates</option>
+                                    <option value="best-perf">Best Performing Only</option>
+                                    <option value="max-opp">Highest Opportunity Only</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-group">
                                 <label id="pacing-email-target-label">Select Partner</label>
                                 <select id="pacing-email-target-select" class="custom-select">
                                     <option value="">-- Select --</option>
@@ -379,9 +448,9 @@
                             </div>
 
                             <div class="filter-group">
-                                <label>Style</label>
+                                <label>Template Style</label>
                                 <select id="pacing-email-style" class="custom-select">
-                                    <option value="standard">Standard (Detailed)</option>
+                                    <option value="standard">Standard Alert</option>
                                     <option value="urgent">Urgent Action</option>
                                 </select>
                             </div>
